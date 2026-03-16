@@ -16,7 +16,7 @@ define('APP_ROOT',    dirname(__DIR__));
 define('APP_ENV',     $appEnv);
 
 // ── Base de datos ──
-define('DB_HOST',    getenv('DB_HOST')    ?: 'localhost');
+define('DB_HOST',    getenv('DB_HOST')    ?: 'db');
 define('DB_NAME',    getenv('DB_NAME')    ?: 'robotschool_inventory');
 define('DB_USER',    getenv('DB_USER')    ?: 'root');
 define('DB_PASS',    getenv('DB_PASS')    ?: '');
