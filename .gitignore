@@ -1,0 +1,25 @@
+# ── Configuración con secretos ────────────────────────────────
+.env
+config/config.php
+
+# ── Uploads de usuarios ───────────────────────────────────────
+assets/uploads/*
+!assets/uploads/.gitkeep
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+/docker/logs/
+
+# ── Docker ────────────────────────────────────────────────────
+# Incluir docker-compose.yml y Dockerfile en el repo.
+# Excluir datos de volúmenes si se persisten localmente.
+docker/mysql-data/
+
+# ── Sistema operativo ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDEs ──────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp

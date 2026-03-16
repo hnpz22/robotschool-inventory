@@ -1,0 +1,220 @@
+<?php
+require_once dirname(__DIR__, 2) . '/config/config.php';
+require_once dirname(__DIR__, 2) . '/includes/Database.php';
+require_once dirname(__DIR__, 2) . '/includes/Auth.php';
+Auth::check();
+
+$db = Database::get();
+$id = (int)($_GET['id'] ?? 0);
+if (!$id) { header('Location: ' . APP_URL . '/modules/pedidos_tienda/'); exit; }
+
+$ESTADOS = [
+    'pendiente'     => ['label'=>'Pendiente',           'color'=>'secondary'],
+    'en_produccion' => ['label'=>'En producción',        'color'=>'info'],
+    'listo_envio'   => ['label'=>'Listo para envío',     'color'=>'warning'],
+    'despachado'    => ['label'=>'Despachado',           'color'=>'primary'],
+    'entregado'     => ['label'=>'Entregado',            'color'=>'success'],
+    'cancelado'     => ['label'=>'Cancelado',            'color'=>'danger'],
+];
+
+$pedido = $db->query("
+    SELECT p.*, DATEDIFF(CURDATE(),p.fecha_compra) AS dias,
+           CASE WHEN p.estado IN ('entregado','cancelado') THEN 'completado'
+                WHEN DATEDIFF(CURDATE(),p.fecha_compra)<=5 THEN 'verde'
+                WHEN DATEDIFF(CURDATE(),p.fecha_compra)<=7 THEN 'amarillo'
+                ELSE 'rojo' END AS semaforo,
+           col.nombre AS colegio_bd, u.nombre AS asignado_nombre
+    FROM tienda_pedidos p
+    LEFT JOIN colegios col ON col.id=p.colegio_id
+    LEFT JOIN usuarios u   ON u.id=p.asignado_a
+    WHERE p.id=$id
+")->fetch();
+if (!$pedido) { header('Location: ' . APP_URL . '/modules/pedidos_tienda/'); exit; }
+
+$pageTitle  = 'Pedido #' . $pedido['woo_order_id'];
+$activeMenu = 'pedidos_tienda';
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD']==='POST' && Auth::csrfVerify($_POST['csrf']??'')) {
+    $action = $_POST['action'] ?? '';
+    if ($action === 'cambiar_estado') {
+        $nuevo = $_POST['estado_nuevo'];
+        $nota  = trim($_POST['nota'] ?? '');
+        $guia  = trim($_POST['guia_envio'] ?? '');
+        $trans = trim($_POST['transportadora'] ?? '');
+        $actual = $pedido['estado'];
+
+        $sets = "estado=:e, updated_at=NOW()";
+        $params = ['e'=>$nuevo,'id'=>$id];
+        if ($nuevo==='despachado') {
+            $sets .= ", fecha_despacho=CURDATE()";
+            if ($guia)  { $sets .= ", guia_envio=:g";     $params['g']=$guia; }
+            if ($trans) { $sets .= ", transportadora=:t";  $params['t']=$trans; }
+        }
+        if ($nuevo==='entregado') { $sets .= ", fecha_entrega=CURDATE()"; }
+
+        $db->prepare("UPDATE tienda_pedidos SET $sets WHERE id=:id")->execute($params);
+        $db->prepare("INSERT INTO tienda_pedidos_historial (pedido_id,estado_ant,estado_nuevo,nota,usuario_id) VALUES (?,?,?,?,?)")
+           ->execute([$id,$actual,$nuevo,$nota?:null,Auth::user()['id']]);
+
+        header('Location: ver.php?id='.$id.'&ok=1'); exit;
+    }
+    if ($action === 'guardar_notas') {
+        $db->prepare("UPDATE tienda_pedidos SET notas_internas=?, asignado_a=?, fecha_limite=?, updated_at=NOW() WHERE id=?")
+           ->execute([trim($_POST['notas']??''), (int)$_POST['asignado_a']?:null, $_POST['fecha_limite']?:null, $id]);
+        header('Location: ver.php?id='.$id.'&ok=1'); exit;
+    }
+}
+if (!empty($_GET['ok'])) $success = 'Cambios guardados correctamente.';
+
+$historial = $db->query("
+    SELECT h.*, u.nombre AS usuario
+    FROM tienda_pedidos_historial h
+    LEFT JOIN usuarios u ON u.id=h.usuario_id
+    WHERE h.pedido_id=$id ORDER BY h.created_at DESC
+")->fetchAll();
+
+$usuarios = $db->query("SELECT id,nombre FROM usuarios WHERE activo=1 ORDER BY nombre")->fetchAll();
+
+$semCol=['rojo'=>'#ef4444','amarillo'=>'#f59e0b','verde'=>'#22c55e','completado'=>'#94a3b8'];
+$sc  = $semCol[$pedido['semaforo']] ?? '#ccc';
+$est = $ESTADOS[$pedido['estado']] ?? ['label'=>$pedido['estado'],'color'=>'secondary'];
+
+require_once dirname(__DIR__, 2) . '/includes/header.php';
+?>
+<style>
+.section-card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
+.sem-dot{width:14px;height:14px;border-radius:50%;display:inline-block}
+.sem-verde{background:#22c55e}.sem-amarillo{background:#f59e0b}.sem-rojo{background:#ef4444}.sem-completado{background:#94a3b8}
+.timeline{border-left:2px solid #e2e8f0;padding-left:1rem;margin-left:.5rem}
+.t-dot{width:10px;height:10px;border-radius:50%;background:#3b82f6;flex-shrink:0;margin-left:-1.1rem;margin-top:3px}
+</style>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a href="<?= APP_URL ?>/modules/pedidos_tienda/" class="btn btn-sm btn-light"><i class="bi bi-arrow-left"></i></a>
+  <div class="flex-grow-1">
+    <h4 class="fw-bold mb-0">
+      <span class="sem-dot sem-<?= $pedido['semaforo'] ?>" style="margin-right:.4rem"></span>
+      Pedido #<?= htmlspecialchars($pedido['woo_order_id']) ?>
+    </h4>
+    <span class="text-muted small">
+      <?= date('d/m/Y', strtotime($pedido['fecha_compra'])) ?>
+      &nbsp;&middot;&nbsp;
+      <span class="badge bg-<?= $est['color'] ?>"><?= $est['label'] ?></span>
+      &nbsp;&middot;&nbsp;
+      <span style="color:<?= $sc ?>;font-weight:700"><?= $pedido['dias'] ?> d&iacute;a(s) desde la compra</span>
+    </span>
+  </div>
+</div>
+
+<?php if ($success): ?><div class="alert alert-success py-2 small"><?= $success ?></div><?php endif; ?>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+
+    <div class="section-card">
+      <h6 class="fw-bold mb-2"><i class="bi bi-person-circle me-2 text-primary"></i>Cliente</h6>
+      <div class="fw-bold"><?= htmlspecialchars($pedido['cliente_nombre']) ?></div>
+      <?php if ($pedido['cliente_telefono']): ?><div class="small text-muted"><i class="bi bi-telephone me-1"></i><?= htmlspecialchars($pedido['cliente_telefono']) ?></div><?php endif; ?>
+      <?php if ($pedido['cliente_email']): ?><div class="small text-muted"><i class="bi bi-envelope me-1"></i><?= htmlspecialchars($pedido['cliente_email']) ?></div><?php endif; ?>
+      <?php if ($pedido['direccion']): ?><div class="small text-muted mt-1"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($pedido['direccion'].($pedido['ciudad']?', '.$pedido['ciudad']:'')) ?></div><?php endif; ?>
+    </div>
+
+    <div class="section-card">
+      <h6 class="fw-bold mb-2"><i class="bi bi-building me-2 text-info"></i>Colegio</h6>
+      <div class="fw-semibold" style="color:#1d4ed8"><?= htmlspecialchars($pedido['colegio_bd'] ?? $pedido['colegio_nombre'] ?? '&mdash;') ?></div>
+      <?php if ($pedido['colegio_id']): ?>
+        <a href="<?= APP_URL ?>/modules/colegios/ver.php?id=<?= $pedido['colegio_id'] ?>" class="btn btn-outline-primary btn-sm mt-2" style="font-size:.75rem"><i class="bi bi-eye me-1"></i>Ver colegio</a>
+      <?php endif; ?>
+    </div>
+
+    <div class="section-card">
+      <h6 class="fw-bold mb-2"><i class="bi bi-box-seam me-2 text-warning"></i>Producto</h6>
+      <div class="fw-semibold"><?= htmlspecialchars($pedido['kit_nombre'] ?? '&mdash;') ?></div>
+      <div class="text-muted small"><?= htmlspecialchars($pedido['categoria'] ?? '') ?></div>
+    </div>
+
+    <!-- Cambiar estado -->
+    <div class="section-card">
+      <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Cambiar Estado</h6>
+      <form method="POST">
+        <input type="hidden" name="action" value="cambiar_estado">
+        <input type="hidden" name="csrf"   value="<?= Auth::csrfToken() ?>">
+        <select name="estado_nuevo" class="form-select form-select-sm mb-2">
+          <?php foreach ($ESTADOS as $k => $e): ?>
+            <option value="<?= $k ?>" <?= $pedido['estado']===$k?'selected':'' ?>><?= strip_tags($e['label']) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <div id="campos-despacho" style="display:<?= $pedido['estado']==='despachado'?'block':'none' ?>">
+          <input type="text" name="guia_envio"     class="form-control form-control-sm mb-1" placeholder="N&uacute;mero de gu&iacute;a" value="<?= htmlspecialchars($pedido['guia_envio']??'') ?>">
+          <input type="text" name="transportadora" class="form-control form-control-sm mb-2" placeholder="Transportadora" value="<?= htmlspecialchars($pedido['transportadora']??'') ?>">
+        </div>
+        <textarea name="nota" class="form-control form-control-sm mb-2" rows="2" placeholder="Nota opcional..."></textarea>
+        <button type="submit" class="btn btn-primary btn-sm w-100">Guardar cambio</button>
+      </form>
+    </div>
+
+    <!-- Notas y asignación -->
+    <div class="section-card">
+      <h6 class="fw-bold mb-3"><i class="bi bi-person-check me-2 text-success"></i>Asignaci&oacute;n y Notas</h6>
+      <form method="POST">
+        <input type="hidden" name="action" value="guardar_notas">
+        <input type="hidden" name="csrf"   value="<?= Auth::csrfToken() ?>">
+        <label class="form-label small mb-1">Responsable</label>
+        <select name="asignado_a" class="form-select form-select-sm mb-2">
+          <option value="">Sin asignar</option>
+          <?php foreach ($usuarios as $u): ?>
+            <option value="<?= $u['id'] ?>" <?= $pedido['asignado_a']==$u['id']?'selected':'' ?>><?= htmlspecialchars($u['nombre']) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <label class="form-label small mb-1">Fecha l&iacute;mite</label>
+        <input type="date" name="fecha_limite" class="form-control form-control-sm mb-2" value="<?= $pedido['fecha_limite'] ?? '' ?>">
+        <label class="form-label small mb-1">Notas internas</label>
+        <textarea name="notas" class="form-control form-control-sm mb-2" rows="3"><?= htmlspecialchars($pedido['notas_internas']??'') ?></textarea>
+        <button type="submit" class="btn btn-outline-success btn-sm w-100">Guardar</button>
+      </form>
+    </div>
+
+  </div>
+
+  <div class="col-lg-8">
+    <div class="section-card">
+      <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2 text-secondary"></i>Historial de Estados</h6>
+      <?php if (empty($historial)): ?>
+        <div class="text-muted small">Sin historial registrado.</div>
+      <?php else: ?>
+      <div class="timeline">
+        <?php foreach ($historial as $h):
+          $ec = $ESTADOS[$h['estado_nuevo']] ?? ['label'=>$h['estado_nuevo'],'color'=>'secondary'];
+        ?>
+        <div class="d-flex gap-2 mb-3">
+          <div class="t-dot"></div>
+          <div>
+            <div class="small fw-semibold">
+              <?php if ($h['estado_ant']): ?>
+                <span class="badge bg-secondary" style="font-size:.68rem"><?= strip_tags($ESTADOS[$h['estado_ant']]['label'] ?? $h['estado_ant']) ?></span>
+                <i class="bi bi-arrow-right mx-1 text-muted"></i>
+              <?php endif; ?>
+              <span class="badge bg-<?= $ec['color'] ?>" style="font-size:.68rem"><?= strip_tags($ec['label']) ?></span>
+            </div>
+            <?php if ($h['nota']): ?><div class="text-muted small mt-1"><?= htmlspecialchars($h['nota']) ?></div><?php endif; ?>
+            <div class="text-muted" style="font-size:.7rem">
+              <?= date('d/m/Y H:i', strtotime($h['created_at'])) ?>
+              <?php if ($h['usuario']): ?>&nbsp;&middot;&nbsp;<?= htmlspecialchars($h['usuario']) ?><?php endif; ?>
+            </div>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelector('select[name="estado_nuevo"]').addEventListener('change', function() {
+  document.getElementById('campos-despacho').style.display = this.value === 'despachado' ? 'block' : 'none';
+});
+</script>
+
+<?php require_once dirname(__DIR__, 2) . '/includes/footer.php'; ?>

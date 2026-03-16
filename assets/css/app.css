@@ -1,0 +1,103 @@
+/* assets/css/app.css — ROBOTSchool Inventory */
+:root {
+  --rs-blue:    #3a72e8;
+  --rs-orange:  #ff6b00;
+  --rs-sidebar: #1e2a3a;
+  --rs-sidebar2:#253447;
+}
+
+/* ── Layout ── */
+#wrapper { min-height: 100vh; }
+
+#sidebar {
+  width: 260px;
+  min-width: 260px;
+  min-height: 100vh;
+  background: var(--rs-sidebar);
+  display: flex;
+  flex-direction: column;
+  transition: width .25s ease;
+}
+#sidebar.collapsed { width: 64px; min-width: 64px; }
+#sidebar.collapsed .nav-link span,
+#sidebar.collapsed .sidebar-divider,
+#sidebar.collapsed .sidebar-user .fw-bold,
+#sidebar.collapsed .sidebar-user .text-muted,
+#sidebar.collapsed .sidebar-header .fw-bold { display: none; }
+
+#page-content { min-width: 0; background: #f4f8ff; }
+.topbar { height: 54px; position: sticky; top: 0; z-index: 100; }
+
+/* ── Sidebar links ── */
+.bg-sidebar { background: var(--rs-sidebar) !important; }
+.sidebar-link {
+  color: rgba(255,255,255,.7) !important;
+  border-radius: 8px;
+  padding: .5rem .8rem;
+  display: flex; align-items: center; gap: .65rem;
+  font-size: .9rem;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.sidebar-link i { font-size: 1.1rem; flex-shrink: 0; }
+.sidebar-link:hover  { background: rgba(255,255,255,.1) !important; color: #fff !important; }
+.sidebar-link.active { background: var(--rs-blue) !important; color: #fff !important; }
+.sidebar-divider {
+  font-size: .68rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: rgba(255,255,255,.35);
+  padding: .9rem .8rem .3rem;
+}
+.avatar-circle {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--rs-blue);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; color: #fff; flex-shrink: 0;
+}
+
+/* ── Cards ── */
+.stat-card {
+  border: none; border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(58,114,232,.08);
+  transition: transform .2s, box-shadow .2s;
+}
+.stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(58,114,232,.15); }
+.stat-card .icon-box {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+}
+
+/* ── Semáforo ── */
+.semaforo-rojo    { color: #dc3545; }
+.semaforo-amarillo{ color: #ffc107; }
+.semaforo-verde   { color: #28a745; }
+.semaforo-azul    { color: #0dcaf0; }
+.badge-semaforo   { font-size: .78rem; padding: .3rem .65rem; border-radius: 2rem; }
+
+/* ── Tabla inventario ── */
+.table-inv th  { background: #f0f4ff; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: #555; }
+.table-inv td  { vertical-align: middle; font-size: .9rem; }
+.elem-foto     { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; }
+.elem-foto-placeholder { width:48px; height:48px; border-radius:8px; background:#eaf1fd; display:flex; align-items:center; justify-content:center; color:var(--rs-blue); font-size:1.4rem; }
+
+/* ── Progress stock ── */
+.stock-bar { height: 6px; border-radius: 4px; }
+
+/* ── Formularios ── */
+.form-label { font-weight: 700; font-size: .88rem; }
+.section-card { background:#fff; border-radius:16px; padding:1.5rem; box-shadow:0 2px 12px rgba(0,0,0,.05); margin-bottom:1.5rem; }
+
+/* ── Barcode ── */
+.barcode-container { background:#fff; border:1px solid #dde6f5; border-radius:12px; padding:1rem; text-align:center; }
+.barcode-container canvas,
+.barcode-container svg { max-width:100%; }
+
+/* ── Dashboard donut labels ── */
+.dashboard-stat-num { font-family:'Baloo 2',cursive; font-size:2.2rem; font-weight:800; line-height:1; }
+.dashboard-stat-lbl { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:#6b7280; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  #sidebar { position: fixed; z-index: 200; height: 100vh; left: -260px; }
+  #sidebar.show { left: 0; }
+  #page-content { margin-left: 0 !important; }
+}

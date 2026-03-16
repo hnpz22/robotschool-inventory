@@ -1,0 +1,35 @@
+# ── Directorio listing ────────────────────────────────────────
+Options -Indexes
+
+# ── Archivos sensibles bloqueados ─────────────────────────────
+<FilesMatch "^(config\.php|\.env)$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "\.(sql|md|sh|bak|log)$">
+  Require all denied
+</FilesMatch>
+
+# ── Headers de seguridad HTTP ─────────────────────────────────
+<IfModule mod_headers.c>
+  # Evita que la página sea embebida en iframes (clickjacking)
+  Header always set X-Frame-Options "DENY"
+
+  # Evita que el navegador infiera el MIME type (MIME sniffing)
+  Header always set X-Content-Type-Options "nosniff"
+
+  # Controla qué información de referencia se envía
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Deshabilita funcionalidades de navegador no necesarias
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+  # Elimina la cabecera que expone el servidor
+  Header always unset X-Powered-By
+  Header unset X-Powered-By
+</IfModule>
+
+# ── Bloquear ejecución PHP en uploads ─────────────────────────
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^assets/uploads/.*\.php$ - [F,L]
+</IfModule>
