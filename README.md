@@ -1,221 +1,306 @@
-# ROBOTSchool Inventory & Platform v3.3
+# ROBOTSchool Inventory & Platform — v3.3
 
-Sistema de gestión integral para ROBOTSchool Colombia — inventario, pedidos, kits, cursos, matrículas y módulo académico LMS.
+Sistema de gestión interna de **ROBOTSchool Colombia**. Centraliza inventario de componentes electrónicos, producción de kits, pedidos de la tienda online (WooCommerce), matrículas de la escuela de robótica, módulo académico LMS para colegios y operaciones comerciales. Uso exclusivamente interno.
 
 ---
 
-## Requisitos del sistema
+## Stack tecnológico
 
-| Componente | Versión mínima |
+| Componente | Versión |
 |---|---|
-| PHP | 7.4+ (compatible PHP 8.x) |
-| MySQL / MariaDB | 5.7+ / 10.3+ |
-| Apache | 2.4+ |
-| XAMPP (recomendado) | 8.x |
+| PHP | 8.1 (Apache) |
+| Base de datos | MySQL 8.0 (Docker) / MariaDB 10.4+ (XAMPP) |
+| CSS | Bootstrap 5.3.2 + Bootstrap Icons 1.11.3 |
+| JS | JsBarcode 3.11.6 — sin frameworks frontend |
+| Contenedores | Docker + Docker Compose 3.9 |
+| Zona horaria | `America/Bogota` |
 
-**Plataformas:** macOS, Windows, Linux (cualquier sistema con XAMPP)
+No se usa ningún framework PHP (sin Laravel, sin Symfony). La arquitectura es PHP vanilla con PDO.
 
 ---
 
-## Instalación rápida
+## Requisitos
 
-### 1. Copiar archivos
+- Docker Desktop 4.x o superior
+- Docker Compose v2 (`docker compose` sin guion)
+- Git
+- Puerto `8000` libre (app), `8080` libre (phpMyAdmin), `3306` libre (MySQL)
 
-**macOS / Linux:**
-```bash
-cp -r robotschool_inventory /Applications/XAMPP/xamppfiles/htdocs/
-# o en Linux:
-cp -r robotschool_inventory /opt/lampp/htdocs/
-```
+Para desarrollo local sin Docker: XAMPP 8.x con PHP 8.1+ y MySQL/MariaDB.
 
-**Windows:**
-```
-Copiar carpeta robotschool_inventory a:
-C:\xampp\htdocs\
-```
+---
 
-### 2. Permisos (macOS / Linux)
+## Levantar el proyecto localmente
+
+### 1. Clonar el repositorio
 
 ```bash
-# macOS
-sudo chmod -R 755 /Applications/XAMPP/xamppfiles/htdocs/robotschool_inventory
-sudo chmod -R 777 /Applications/XAMPP/xamppfiles/htdocs/robotschool_inventory/uploads
-
-# Linux
-sudo chmod -R 755 /opt/lampp/htdocs/robotschool_inventory
-sudo chmod -R 777 /opt/lampp/htdocs/robotschool_inventory/uploads
+git clone <url-del-repo> robotschool_inventory
+cd robotschool_inventory
 ```
 
-**Windows:** No requiere cambios de permisos.
+### 2. Crear el archivo de entorno
 
-### 3. Base de datos
-
-1. Abrir **phpMyAdmin** → `http://localhost/phpmyadmin`
-2. Crear base de datos: `robotschool_inventory` (cotejamiento: `utf8mb4_unicode_ci`)
-3. Seleccionar la BD → pestaña **SQL**
-4. Ejecutar los archivos SQL en este orden:
-
-```
-sql/01_schema_base.sql          ← Estructura base del sistema
-sql/02_migration_v2.0.sql       ← Roles y permisos
-sql/03_migration_v3.0.sql       ← Matrículas y módulo académico
-sql/04_migration_v3.1.sql       ← Cupos por inventario
-sql/05_migration_v3.2.sql       ← Módulo de cursos
-sql/06_migration_v3.3.sql       ← Sedes
+```bash
+cp .env.example .env
 ```
 
-### 4. Configuración
+Editar `.env` con los valores reales (ver sección [Variables de entorno](#variables-de-entorno)):
 
-Editar `config/config.php`:
-
-```php
-// Base de datos
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'robotschool_inventory');
-define('DB_USER', 'root');
-define('DB_PASS', '');          // Tu password de MySQL
-
-// URL del sistema
-define('APP_URL', 'http://localhost/robotschool_inventory');
-
-// API Key de Anthropic (para banner IA - opcional)
-define('ANTHROPIC_API_KEY', 'sk-ant-api03-...');
+```bash
+# Mínimo obligatorio para levantar:
+DB_PASS=una_contraseña_segura
+DB_ROOT_PASS=otra_contraseña_root
 ```
 
-### 5. Acceder al sistema
+### 3. Levantar los contenedores
+
+```bash
+docker compose up -d
+```
+
+Esto levanta tres servicios:
+- `robotschool_app` — PHP 8.1 + Apache en `http://localhost:8000`
+- `robotschool_db` — MySQL 8.0 en `localhost:3306`
+- `robotschool_pma` — phpMyAdmin en `http://localhost:8080`
+
+El contenedor `app` espera a que la BD esté sana (`healthcheck`) antes de arrancar.
+
+### 4. Importar la base de datos
+
+Desde phpMyAdmin (`http://localhost:8080`) o desde CLI:
+
+```bash
+docker exec -i robotschool_db mysql \
+  -u rsuser -p<DB_PASS> robotschool_inventory \
+  < database/seed.sql
+```
+
+`seed.sql` crea todas las tablas, vistas y datos de referencia iniciales.
+
+### 5. Crear el primer usuario administrador
+
+Con los contenedores corriendo, abrir en el navegador:
 
 ```
-http://localhost/robotschool_inventory
+http://localhost:8000/setup_admin.php
 ```
 
-**Credenciales iniciales:**
-| Usuario | Contraseña |
-|---|---|
-| admin@robotschool.com.co | robotschool2025 |
+- Solo accesible desde `localhost` (bloquea otras IPs por seguridad).
+- Ingresar nombre, email y contraseña (mínimo 8 caracteres).
+- Si el email ya existe, actualiza la contraseña y fuerza `rol_id = 1` (Gerencia).
+- **Eliminar `setup_admin.php` del servidor después de usarlo.**
 
-> ⚠️ Cambiar la contraseña después del primer acceso.
+### 6. Iniciar sesión
+
+```
+http://localhost:8000
+```
+
+Redirige automáticamente al login. Ingresar con las credenciales creadas en el paso anterior.
 
 ---
 
-## Estructura del proyecto
+## Detener el proyecto
+
+```bash
+docker compose down          # detiene y elimina contenedores (datos persisten en volumen)
+docker compose down -v       # detiene y elimina contenedores + volúmenes (borra la BD)
+```
+
+---
+
+## Variables de entorno
+
+Todas se definen en `.env` (no commitear, está en `.gitignore`). Ver `.env.example` como referencia.
+
+| Variable | Requerida | Descripción | Ejemplo |
+|---|---|---|---|
+| `APP_ENV` | Sí | Entorno de ejecución | `development` / `production` |
+| `APP_PORT` | No | Puerto local de la app | `8000` |
+| `APP_URL` | Sí | URL base sin barra final | `http://localhost:8000` |
+| `DB_HOST` | — | Fijado a `db` por docker-compose | `db` |
+| `DB_NAME` | No | Nombre de la BD | `robotschool_inventory` |
+| `DB_USER` | No | Usuario MySQL de la app | `rsuser` |
+| `DB_PASS` | **Sí** | Contraseña del usuario MySQL | — |
+| `DB_ROOT_PASS` | **Sí** | Contraseña root MySQL | — |
+| `SESSION_TIMEOUT` | No | Segundos de inactividad antes de cerrar sesión | `3600` |
+| `ANTHROPIC_API_KEY` | No | API key de Claude AI (banner de cursos) | `sk-ant-...` |
+| `MS_CLIENT_ID` | No | Azure App Client ID (login Microsoft) | — |
+| `MS_CLIENT_SECRET` | No | Azure App Secret (login Microsoft) | — |
+| `MS_TENANT_ID` | No | Tenant ID Azure (`common` para multi-tenant) | `common` |
+
+---
+
+## Estructura de carpetas
 
 ```
 robotschool_inventory/
+│
 ├── config/
-│   └── config.php              ← Configuración principal
+│   ├── config.php              # Configuración central — lee variables de entorno
+│   └── config.example.php      # Plantilla de configuración
+│
 ├── includes/
-│   ├── Auth.php                ← Autenticación y permisos
-│   ├── Database.php            ← Conexión PDO
-│   ├── helpers.php             ← Funciones utilitarias
-│   ├── header.php              ← Layout header + menú
-│   └── footer.php              ← Layout footer
-├── modules/
-│   ├── elementos/              ← Inventario de elementos
-│   ├── kits/                   ← Constructor y gestión de kits
-│   ├── colegios/               ← Colegios y cursos asignados
-│   ├── pedidos_tienda/         ← Pedidos WooCommerce + stickers
-│   ├── produccion/             ← Solicitudes de producción
-│   ├── importaciones/          ← Importaciones y proveedores
-│   ├── despachos/              ← Guías y despachos
-│   ├── reportes/               ← Reportes e inventario
-│   ├── cursos/                 ← Cursos escuela + horarios + sedes
-│   ├── matriculas/             ← Matrículas y pagos de la escuela
-│   ├── academico/              ← LMS académico para colegios
-│   ├── usuarios/               ← Gestión de usuarios
-│   └── barcodes/               ← Códigos de barras
-├── uploads/                    ← Archivos subidos (imágenes)
+│   ├── Auth.php                # Autenticación, roles, CSRF, permisos granulares
+│   ├── Database.php            # Conexión PDO (singleton)
+│   ├── helpers.php             # Funciones globales: semáforo, liquidación, auditoría, paginación
+│   ├── WooSync.php             # Sincronización con WooCommerce REST API v3
+│   ├── header.php              # Layout HTML: sidebar dinámico por rol + topbar
+│   └── footer.php              # Cierre del layout + scripts Bootstrap
+│
+├── modules/                    # Un directorio por módulo funcional
+│   ├── academico/              # LMS para colegios
+│   ├── auth/                   # Login, logout, OAuth Microsoft
+│   ├── barcodes/               # Impresión de códigos de barras
+│   ├── colegios/               # Gestión de colegios clientes
+│   ├── comercial/              # Requerimientos y convenios comerciales
+│   ├── cursos/                 # Cursos de la escuela de robótica
+│   ├── despachos/              # Guías de despacho y entregas
+│   ├── elementos/              # Inventario de componentes electrónicos
+│   ├── importaciones/          # Pedidos de importación y liquidación aduanera
+│   ├── inventario/             # Historial de movimientos de stock
+│   ├── kits/                   # Constructor y gestión de kits
+│   ├── matriculas/             # Matrículas, pagos y estudiantes de la escuela
+│   ├── pedidos_tienda/         # Pedidos WooCommerce y logística
+│   ├── produccion/             # Tablero kanban de producción
+│   ├── reportes/               # Reportes e inventario valorizado
+│   └── usuarios/               # Gestión de usuarios y roles
+│
+├── api/                        # Endpoints JSON para llamadas AJAX internas
+│   ├── crear_elemento.php
+│   ├── elemento_by_code.php
+│   ├── movimiento.php
+│   └── pedido_detalle.php
+│
 ├── assets/
-│   ├── css/                    ← Estilos
-│   ├── js/                     ← Scripts
-│   └── img/                    ← Imágenes del sistema
-└── sql/                        ← Migraciones SQL
+│   ├── css/app.css             # Estilos personalizados del sistema
+│   ├── js/app.js               # Scripts globales
+│   ├── img/                    # Logos del sistema
+│   └── uploads/                # Imágenes subidas (elementos, kits, colegios, etc.)
+│
+├── database/
+│   └── seed.sql                # Esquema completo + datos iniciales
+│
+├── docker/
+│   ├── php.ini                 # Configuración PHP para el contenedor
+│   └── mysql-init/             # Scripts SQL que MySQL ejecuta al inicializar (si existen)
+│
+├── .env.example                # Plantilla de variables de entorno
+├── .htaccess                   # Configuración Apache (mod_rewrite)
+├── docker-compose.yml          # Orquestación de servicios
+├── Dockerfile                  # Imagen PHP 8.1 + Apache + extensiones
+├── index.php                   # Entrada: redirige a login.php
+├── login.php                   # Pantalla de inicio de sesión
+├── dashboard.php               # Dashboard principal post-login
+└── setup_admin.php             # Utilidad de primer arranque — eliminar después de usar
 ```
 
 ---
 
 ## Módulos del sistema
 
-### 📦 Inventario
-- Elementos por categoría con semáforo de stock
-- Categorías: Arduino, ESP32, Sensores, Tornillos, LEDs, MDF, Filamentos, etc.
-- Códigos de barras y etiquetas
-- Importaciones con liquidación de aranceles
-- Reportes y valorización
-
-### 🛒 Tienda Online
-- Importación CSV de WooCommerce
-- Gestión de estados de pedidos
-- Etiquetas de envío (10 por hoja carta)
-- Selección de pedidos con checkboxes para impresión masiva
-- Solicitudes a producción con notificaciones
-
-### 🎒 Kits
-- Constructor visual de kits desde inventario
-- Sticker de caja con componentes e imágenes (4 por hoja)
-- Asignación a cursos de colegios
-
-### 🏫 Colegios
-- Gestión de colegios con coordinadores
-- Cursos por colegio agrupados por grado
-- Asignación de kits a cursos
-
-### 🎓 Cursos Escuela
-- Catálogo de cursos: Robótica, Python, Minecraft, Roblox, Impresión 3D, Arduino
-- **Horarios**: 3 franjas sabatinas (8-10, 10:30-12:30, 1-3pm)
-- **Cupos**: calculados automáticamente desde el stock del inventario
-- **Sedes**: Bogotá Norte, Bogotá Sur, Cali
-- **Banner IA**: generación de banner promocional con Claude AI
-- Módulos de avance del curso
-
-### 📋 Matrículas
-- Registro de estudiantes y acudientes
-- Matrículas vinculadas a grupos/horarios
-- Seguimiento de pagos: efectivo, Nequi, Daviplata, transferencia
-- **Calendario de sábados**: resumen de recaudo por semana
-- Cupos en tiempo real según inventario
-
-### 📚 Académico LMS
-- Colegios con coordinadores
-- Cursos → Unidades → Actividades
-- Materiales asignables por estudiante
-- **Sistema XP y gamificación**:
-  - Aprendiz (0-99 XP)
-  - Constructor (100-299 XP)
-  - Ingeniero (300-599 XP)
-  - Maestro (600+ XP)
-
-### 👥 Usuarios y Roles
-| Rol | Permisos |
-|---|---|
-| Administrador | Acceso total |
-| Operador | Inventario, kits, colegios |
-| Tienda | Pedidos tienda + producción |
-| Producción | Armar kits, actualizar estados |
-| Despachos | Guías y entregas |
-| Consulta | Solo lectura |
+| Módulo | Ruta | Descripción |
+|---|---|---|
+| **Dashboard** | `/dashboard.php` | Resumen ejecutivo: semáforo de stock por categoría, alertas críticas, últimos movimientos |
+| **Elementos** | `/modules/elementos/` | Inventario de componentes con semáforo rojo/amarillo/verde/azul, 3 vistas (tabla, tarjetas, categorías), código de barras automático (`RS-ARD-001`) |
+| **Movimientos** | `/modules/inventario/` | Historial completo de entradas, salidas, ajustes, devoluciones y transferencias de stock |
+| **Códigos de barras** | `/modules/barcodes/` | Impresión masiva de etiquetas con código de barras JsBarcode |
+| **Kits** | `/modules/kits/` | Constructor visual de kits desde inventario, gestión de prototipos, sticker de caja imprimible (4 por hoja) |
+| **Colegios** | `/modules/colegios/` | CRUD de colegios clientes, asignación de cursos y kits, coordinadores |
+| **Importaciones** | `/modules/importaciones/` | Pedidos de importación DHL, liquidación proporcional de flete + aranceles + IVA por peso, gestión de proveedores |
+| **Pedidos Tienda** | `/modules/pedidos_tienda/` | Importación CSV de WooCommerce, gestión de estados, stickers de envío (10 por hoja carta), lista imprimible |
+| **Producción** | `/modules/produccion/` | Tablero Kanban con 4 estados (pendiente/en proceso/listo/rechazado), 6 fuentes de origen, cronograma de producción |
+| **Despachos** | `/modules/despachos/` | Registro de guías de despacho, exportar PDF, historial de entregas |
+| **Cursos** | `/modules/cursos/` | Catálogo de cursos de la escuela (Robótica, Python, Minecraft, Roblox, Impresión 3D, Arduino), horarios sabatinos, sedes, generación de banner con Claude AI |
+| **Matrículas** | `/modules/matriculas/` | Inscripción de estudiantes, grupos por horario, pagos (Nequi/Daviplata/transferencia/efectivo), cupos en tiempo real vinculados al inventario, calendario semanal de recaudo |
+| **Académico LMS** | `/modules/academico/` | LMS para colegios: Cursos → Unidades → Actividades, materiales asignables, sistema de XP y gamificación |
+| **Comercial** | `/modules/comercial/` | Pipeline de requerimientos y convenios comerciales con colegios, historial de estados, badge de pendientes en tiempo real |
+| **Reportes** | `/modules/reportes/` | Inventario valorizado en COP, exportar Excel/PDF, reporte por categoría |
+| **Usuarios** | `/modules/usuarios/` | CRUD de usuarios, asignación de roles, historial de último acceso |
 
 ---
 
-## Configurar Banner IA
+## Roles y permisos
 
-Para usar el generador de banners con Claude AI:
+El sistema tiene 6 roles fijos. El acceso a cada módulo del sidebar se controla por rol. Gerencia tiene acceso total y no puede ser bloqueada por permisos granulares.
 
-1. Obtener API key en [console.anthropic.com](https://console.anthropic.com)
-2. Agregar en `config/config.php`:
-```php
-define('ANTHROPIC_API_KEY', 'sk-ant-api03-TU-API-KEY-AQUI');
+| ID | Rol | Módulos accesibles |
+|---|---|---|
+| 1 | **Gerencia** | Todo — sin restricciones |
+| 2 | **Administración** | Dashboard, Inventario, Kits, Colegios, Pedidos Tienda, Producción, Reportes |
+| 3 | **Academia** | Dashboard, Cursos, Matrículas, Pagos, Académico LMS, Colegios |
+| 4 | **Producción** | Dashboard, Inventario, Kits, Producción |
+| 5 | **Comercial** | Dashboard, Comercial, Convenios, Colegios |
+| 6 | **Consulta** | Dashboard, Inventario (solo lectura), Reportes |
+
+Los roles 1 y 2 tienen además acceso a Importaciones y Despachos que no aparecen en la tabla de menú estándar.
+
+Los permisos granulares (ver/crear/editar/eliminar por módulo) se almacenan en la tabla `rol_permisos` y son consultados por `Auth::puede()`.
+
+---
+
+## Integración WooCommerce (opcional)
+
+La sincronización con WooCommerce se configura desde la tabla `configuracion` (grupo `woocommerce`):
+
+| Clave | Descripción |
+|---|---|
+| `woo_url` | URL base del sitio WordPress (ej: `https://tienda.robotschool.com.co`) |
+| `woo_consumer_key` | Consumer Key de WooCommerce REST API v3 |
+| `woo_consumer_secret` | Consumer Secret de WooCommerce REST API v3 |
+| `woo_campo_colegio` | Campo personalizado del checkout donde el cliente ingresa su colegio |
+
+---
+
+## Login con Microsoft 365 (opcional)
+
+Configurar en `.env`:
+
 ```
-3. Verificar que cURL esté habilitado en PHP (XAMPP lo incluye por defecto)
+MS_CLIENT_ID=<Azure App Registration Client ID>
+MS_CLIENT_SECRET=<Azure App Registration Secret>
+MS_TENANT_ID=common
+```
+
+El usuario debe existir previamente en la tabla `usuarios` con el mismo email corporativo. El callback OAuth está en `/modules/auth/ms_callback.php`.
 
 ---
 
-## Franjas horarias sabatinas
+## Generador de banners con Claude AI (opcional)
 
-| Franja | Horario |
+El módulo de Cursos puede generar banners promocionales usando la API de Anthropic:
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-...
+```
+
+Sin esta variable, el botón "Generar Banner IA" no aparece en el formulario de cursos.
+
+---
+
+## Notas de seguridad
+
+- `setup_admin.php` solo acepta conexiones desde `127.0.0.1` / `::1`. Eliminarlo tras el primer uso.
+- Todos los formularios incluyen token CSRF validado por `Auth::csrfVerify()`.
+- Las contraseñas se almacenan con `password_hash()` bcrypt cost 12.
+- Las cookies de sesión tienen `HttpOnly`, `SameSite=Lax` y modo estricto activado.
+- En producción (`APP_ENV=production`), los errores PHP no se muestran en pantalla.
+
+---
+
+## Changelog
+
+| Versión | Cambios principales |
 |---|---|
-| Mañana 1 | 8:00 am - 10:00 am |
-| Mañana 2 | 10:30 am - 12:30 pm |
-| Tarde | 1:00 pm - 3:00 pm |
+| **v3.3** | Sedes (Bogotá Norte, Bogotá Sur, Cali), filtro por sede en horarios y matrículas |
+| **v3.2** | Módulo de cursos, horarios sabatinos, cupos vinculados al inventario, banner con Claude AI |
+| **v3.1** | Cupos de grupos calculados desde stock del inventario en tiempo real |
+| **v3.0** | Módulo de matrículas, módulo académico LMS, sistema XP/gamificación |
+| **v2.0** | Sistema de roles y permisos granulares por módulo |
+| **v1.9** | Nuevas categorías de inventario |
+| **v1.8** | Integración WooCommerce: importación CSV y sincronización API |
+| **v1.0** | Sistema base: inventario, kits, colegios |
 
 ---
 
@@ -223,21 +308,6 @@ define('ANTHROPIC_API_KEY', 'sk-ant-api03-TU-API-KEY-AQUI');
 
 **ROBOTSchool Colombia**
 - Web: robotschool.com.co
-- Tel: 318 654 1859
 - Email: info@robotschool.com.co
+- Tel: 318 654 1859
 - Bogotá, Colombia
-
----
-
-## Changelog
-
-| Versión | Cambios |
-|---|---|
-| v3.3 | Sedes (Bogotá x2, Cali), filtro por sede en horarios |
-| v3.2 | Módulo de cursos, horarios, cupos por inventario, banner IA |
-| v3.1 | Cupos de grupos vinculados al inventario |
-| v3.0 | Módulo matrículas, módulo académico LMS |
-| v2.0 | Sistema de roles y permisos por módulo |
-| v1.9 | Nuevas categorías inventario |
-| v1.8 | Pedidos tienda WooCommerce |
-| v1.0 | Sistema base: inventario, kits, colegios |

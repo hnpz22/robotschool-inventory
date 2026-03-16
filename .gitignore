@@ -10,6 +10,9 @@ assets/uploads/*
 *.log
 /docker/logs/
 
+# ── Backups ───────────────────────────────────────────────────
+backups/
+
 # ── Docker ────────────────────────────────────────────────────
 # Incluir docker-compose.yml y Dockerfile en el repo.
 # Excluir datos de volúmenes si se persisten localmente.

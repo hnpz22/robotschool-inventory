@@ -23,7 +23,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
   <link href="<?= APP_URL ?>/assets/css/app.css" rel="stylesheet">
   <style>
     /* Badge rol en sidebar */
-    .rol-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;background:<?= $rm['color'] ?? '#185FA5' ?>;color:#fff;margin-top:.25rem}
+    .rol-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;background:<?= $_rm['color'] ?? '#185FA5' ?>;color:#fff;margin-top:.25rem}
     /* Notif badge */
     .notif-dot{position:relative}
     .notif-dot .dot{position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:1.5px solid #1e2a3a}
