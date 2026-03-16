@@ -1,6 +1,5 @@
-# ── Configuración con secretos ────────────────────────────────
+# ── Credenciales reales (nunca al repo) ───────────────────────
 .env
-config/config.php
 
 # ── Uploads de usuarios ───────────────────────────────────────
 assets/uploads/*
