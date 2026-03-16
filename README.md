@@ -24,7 +24,7 @@ No se usa ningún framework PHP (sin Laravel, sin Symfony). La arquitectura es P
 - Docker Desktop 4.x o superior
 - Docker Compose v2 (`docker compose` sin guion)
 - Git
-- Puerto `8000` libre (app), `8080` libre (phpMyAdmin), `3306` libre (MySQL)
+- Puerto `8081` libre (app), `8080` libre (phpMyAdmin), `3306` libre (MySQL)
 
 Para desarrollo local sin Docker: XAMPP 8.x con PHP 8.1+ y MySQL/MariaDB.
 
@@ -60,7 +60,7 @@ docker compose up -d
 ```
 
 Esto levanta tres servicios:
-- `robotschool_app` — PHP 8.1 + Apache en `http://localhost:8000`
+- `robotschool_app` — PHP 8.1 + Apache en `http://localhost:8081`
 - `robotschool_db` — MySQL 8.0 en `localhost:3306`
 - `robotschool_pma` — phpMyAdmin en `http://localhost:8080`
 
@@ -68,7 +68,7 @@ El contenedor `app` espera a que la BD esté sana (`healthcheck`) antes de arran
 
 ### 4. Importar la base de datos
 
-Desde phpMyAdmin (`http://localhost:8080`) o desde CLI:
+Desde phpMyAdmin (`http://localhost:8080`) o desde CLI (reemplaza `<DB_PASS>` por tu contraseña):
 
 ```bash
 docker exec -i robotschool_db mysql \
@@ -83,7 +83,7 @@ docker exec -i robotschool_db mysql \
 Con los contenedores corriendo, abrir en el navegador:
 
 ```
-http://localhost:8000/setup_admin.php
+http://TU-IP-O-DOMINIO:8081/setup_admin.php
 ```
 
 - Solo accesible desde `localhost` (bloquea otras IPs por seguridad).
@@ -94,10 +94,33 @@ http://localhost:8000/setup_admin.php
 ### 6. Iniciar sesión
 
 ```
-http://localhost:8000
+http://TU-IP-O-DOMINIO:8081
 ```
 
 Redirige automáticamente al login. Ingresar con las credenciales creadas en el paso anterior.
+
+---
+
+## Configuración del servidor
+
+`APP_URL` debe apuntar a la IP pública o dominio real del servidor donde corre la app. Es la variable más crítica del deploy — un valor incorrecto rompe todos los redirects.
+
+```bash
+# En el servidor, editar .env:
+APP_URL=http://147.93.114.39:8081   # ← IP real o dominio, con el puerto correcto
+APP_PORT=8081
+```
+
+Reglas:
+- **Sin barra final** (`/`) — `config.php` la elimina con `rtrim()` pero evita confusiones
+- **Con puerto** si no es 80/443 estándar
+- **Con `https://`** si el servidor tiene TLS configurado
+
+Después de cambiar `APP_URL` en `.env`, reiniciar los contenedores para que Docker propague la variable:
+
+```bash
+docker compose down && docker compose up -d
+```
 
 ---
 
@@ -117,8 +140,8 @@ Todas se definen en `.env` (no commitear, está en `.gitignore`). Ver `.env.exam
 | Variable | Requerida | Descripción | Ejemplo |
 |---|---|---|---|
 | `APP_ENV` | Sí | Entorno de ejecución | `development` / `production` |
-| `APP_PORT` | No | Puerto local de la app | `8000` |
-| `APP_URL` | Sí | URL base sin barra final | `http://localhost:8000` |
+| `APP_PORT` | No | Puerto local de la app | `8081` |
+| `APP_URL` | Sí | URL base sin barra final — IP o dominio real del servidor | `http://147.93.114.39:8081` |
 | `DB_HOST` | — | Fijado a `db` por docker-compose | `db` |
 | `DB_NAME` | No | Nombre de la BD | `robotschool_inventory` |
 | `DB_USER` | No | Usuario MySQL de la app | `rsuser` |
