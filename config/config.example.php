@@ -7,7 +7,7 @@
 // ── App ──────────────────────────────────────────────────────
 define('APP_NAME',    'ROBOTSchool Inventory');
 define('APP_VERSION', '3.5.0');
-define('APP_URL',     'http://localhost/robotschool_inventory');   // ← Cambia según tu entorno
+define('APP_URL',     'http://localhost:8081');   // ← Cambia según tu entorno
 define('APP_ROOT',    dirname(__DIR__));
 
 // ── Base de datos ─────────────────────────────────────────────

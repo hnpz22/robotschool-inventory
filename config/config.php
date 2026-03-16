@@ -11,7 +11,7 @@ $appEnv = getenv('APP_ENV') ?: 'development';
 // ── Aplicación ──
 define('APP_NAME',    'ROBOTSchool Inventory');
 define('APP_VERSION', '3.3');
-define('APP_URL',     rtrim(getenv('APP_URL') ?: 'http://localhost/robotschool_inventory', '/'));
+define('APP_URL',     rtrim(getenv('APP_URL') ?: 'http://localhost:8081', '/'));
 define('APP_ROOT',    dirname(__DIR__));
 define('APP_ENV',     $appEnv);
 
