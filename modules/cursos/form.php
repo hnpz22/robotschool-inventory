@@ -37,15 +37,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && Auth::csrfVerify($_POST['csrf']??''))
             'activo'           => 1,
         ];
 
-        // Manejo de imagen
-        if (!empty($_FILES['imagen']['name'])) {
-            $ext  = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-            $dest = UPLOAD_DIR . 'cursos/';
-            if (!is_dir($dest)) mkdir($dest, 0755, true);
-            $fname = 'curso_'.($id?:time()).'.'.$ext;
-            if (move_uploaded_file($_FILES['imagen']['tmp_name'], $dest.$fname)) {
-                $data['imagen'] = 'cursos/'.$fname;
-            }
+        // Manejo de imagen — usa subirFoto() que valida extensión, tamaño y MIME real
+        if (!empty($_FILES['imagen']['name']) && ($_FILES['imagen']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $data['imagen'] = subirFoto($_FILES['imagen'], 'cursos');
         }
 
         if ($id) {

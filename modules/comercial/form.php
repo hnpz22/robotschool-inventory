@@ -24,13 +24,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && Auth::csrfVerify($_POST['csrf']??''))
     try {
         // Subir PDF
         $docConvenio = $conv['doc_convenio'] ?? null;
-        if (!empty($_FILES['doc_convenio']['name'])) {
+        if (!empty($_FILES['doc_convenio']['name']) && ($_FILES['doc_convenio']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['doc_convenio']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception('Error en la subida del archivo (código: ' . $_FILES['doc_convenio']['error'] . ').');
+            }
             $ext = strtolower(pathinfo($_FILES['doc_convenio']['name'], PATHINFO_EXTENSION));
-            if (!in_array($ext,['pdf','PDF'])) throw new Exception('Solo se permiten archivos PDF.');
+            if ($ext !== 'pdf') throw new Exception('Solo se permiten archivos PDF.');
+            // Validar MIME real por contenido del archivo (no confiar en la extensión)
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime  = $finfo->file($_FILES['doc_convenio']['tmp_name']);
+            if ($mime !== 'application/pdf') throw new Exception('El archivo no es un PDF válido.');
             $dest = UPLOAD_DIR.'convenios/';
-            if (!is_dir($dest)) mkdir($dest,0755,true);
-            $fname = 'conv_'.time().'_'.uniqid().'.'.$ext;
-            if (!move_uploaded_file($_FILES['doc_convenio']['tmp_name'],$dest.$fname))
+            if (!is_dir($dest)) mkdir($dest, 0755, true);
+            $fname = 'conv_'.time().'_'.uniqid().'.pdf';
+            if (!move_uploaded_file($_FILES['doc_convenio']['tmp_name'], $dest.$fname))
                 throw new Exception('Error al subir el documento.');
             $docConvenio = $fname;
         }

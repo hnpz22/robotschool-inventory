@@ -118,13 +118,25 @@ function auditoria(string $accion, string $tabla='', int $regId=0, array $antes=
 
 // ── Upload de imagen ──
 function subirFoto(array $file, string $subdir='elementos'): ?string {
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new Exception('Error en la subida del archivo (código: ' . ($file['error'] ?? -1) . ')');
+    }
     $dir = UPLOAD_DIR . $subdir . '/';
     if (!is_dir($dir)) mkdir($dir, 0755, true);
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['jpg','jpeg','png','webp','gif'])) throw new Exception("Formato no permitido");
-    if ($file['size'] > 5 * 1024 * 1024) throw new Exception("Imagen mayor a 5MB");
+    if (!in_array($ext, ['jpg','jpeg','png','webp','gif'])) {
+        throw new Exception('Formato no permitido. Use JPG, PNG, WEBP o GIF.');
+    }
+    if ($file['size'] > 5 * 1024 * 1024) throw new Exception('Imagen mayor a 5 MB');
+    // Validar MIME real por contenido del archivo (no confiar en la extensión)
+    $finfo        = new finfo(FILEINFO_MIME_TYPE);
+    $mime         = $finfo->file($file['tmp_name']);
+    $mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!in_array($mime, $mimesPermitidos)) {
+        throw new Exception('El archivo no es una imagen válida.');
+    }
     $nombre = uniqid('img_', true) . '.' . $ext;
-    if (!move_uploaded_file($file['tmp_name'], $dir . $nombre)) throw new Exception("Error al guardar imagen");
+    if (!move_uploaded_file($file['tmp_name'], $dir . $nombre)) throw new Exception('Error al guardar imagen');
     return $subdir . '/' . $nombre;
 }
 
