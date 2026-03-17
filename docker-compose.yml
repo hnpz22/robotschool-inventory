@@ -87,6 +87,21 @@ services:
       timeout: 10s
       retries: 3
 
+  # ── Nginx reverse proxy ───────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: robotschool_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - app
+      - minio
+    networks:
+      - robotschool
+
   # ── phpMyAdmin ────────────────────────────────────────────────
   phpmyadmin:
     image: phpmyadmin:5
