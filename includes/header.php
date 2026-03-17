@@ -120,7 +120,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
     <?php endif; ?>
 
     <!-- ── IMPORTACIONES (solo Admin/Gerencia) ── -->
-    <?php if ($_rolId <= 2): ?>
+    <?php if (in_array('pedidos', $_menu)): ?>
     <li class="nav-item"><div class="sidebar-divider">IMPORTACIONES</div></li>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='pedidos'?'active':'' ?>"
@@ -163,7 +163,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
     <?php endif; ?>
 
     <!-- ── DESPACHOS (Admin/Gerencia) ── -->
-    <?php if ($_rolId <= 2): ?>
+    <?php if (in_array('despachos', $_menu)): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='despachos'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/despachos/">

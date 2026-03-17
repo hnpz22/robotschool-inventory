@@ -3,7 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
-Auth::requireAdmin();
+Auth::requireRol('gerencia');
 
 $db = Database::get();
 $pageTitle  = 'Usuarios';
@@ -19,7 +19,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rolId  = (int)$_POST['rol_id'];
     $activo = isset($_POST['activo']) ? 1 : 0;
     try {
+        if ($rolId === 1 && !Auth::isGerencia()) {
+            throw new Exception('Solo Gerencia puede asignar el rol Gerencia.');
+        }
         if ($uid) {
+            $antes = $db->query("SELECT nombre,email,rol_id,activo FROM usuarios WHERE id=$uid")->fetch() ?: [];
             $data = ['nombre'=>$nombre,'email'=>$email,'rol_id'=>$rolId,'activo'=>$activo,'id'=>$uid];
             if (!empty($_POST['password'])) {
                 $data['password_hash'] = password_hash($_POST['password'], PASSWORD_BCRYPT, ['cost'=>12]);
@@ -27,11 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $db->prepare("UPDATE usuarios SET nombre=:nombre,email=:email,rol_id=:rol_id,activo=:activo WHERE id=:id")->execute($data);
             }
+            auditoria('editar_usuario', 'usuarios', $uid, $antes, ['nombre'=>$nombre,'email'=>$email,'rol_id'=>$rolId,'activo'=>$activo]);
             $success = 'Usuario actualizado.';
         } else {
             if (empty($_POST['password'])) throw new Exception('La contraseña es requerida para nuevos usuarios.');
             $db->prepare("INSERT INTO usuarios (nombre,email,password_hash,rol_id,activo) VALUES (?,?,?,?,?)")
                ->execute([$nombre,$email,password_hash($_POST['password'],PASSWORD_BCRYPT,['cost'=>12]),$rolId,$activo]);
+            auditoria('crear_usuario', 'usuarios', (int)$db->lastInsertId(), [], ['nombre'=>$nombre,'email'=>$email,'rol_id'=>$rolId,'activo'=>$activo]);
             $success = 'Usuario creado.';
         }
     } catch (Exception $e) { $error = $e->getMessage(); }
@@ -41,13 +47,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['del']) && Auth::csrfVerify($_GET['csrf']??'')) {
     $delId = (int)$_GET['del'];
     if ($delId !== Auth::user()['id']) {
+        $antes = $db->query("SELECT nombre,email,rol_id,activo FROM usuarios WHERE id=$delId")->fetch() ?: [];
         $db->prepare("UPDATE usuarios SET activo=0 WHERE id=?")->execute([$delId]);
+        auditoria('desactivar_usuario', 'usuarios', $delId, $antes, ['activo'=>0]);
         $success = 'Usuario desactivado.';
     } else { $error = 'No puedes desactivarte a ti mismo.'; }
 }
 
 $usuarios = $db->query("SELECT u.*,r.nombre AS rol_nombre FROM usuarios u JOIN roles r ON r.id=u.rol_id ORDER BY u.id")->fetchAll();
-$roles    = $db->query("SELECT * FROM roles")->fetchAll();
+$roles = Auth::isGerencia()
+    ? $db->query("SELECT * FROM roles ORDER BY id")->fetchAll()
+    : $db->query("SELECT * FROM roles WHERE id != 1 ORDER BY id")->fetchAll();
 
 // Cargar para editar
 $editUser = null;

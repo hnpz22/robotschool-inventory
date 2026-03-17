@@ -8,11 +8,13 @@ class Auth {
         1 => [ // gerencia
             'dashboard','inventario','kits','colegios','pedidos_tienda',
             'produccion','cursos','matriculas','pagos','academico',
-            'comercial','convenios','reportes','usuarios','config','categorias'
+            'comercial','convenios','reportes','usuarios','config','categorias',
+            'pedidos','proveedores','despachos'
         ],
         2 => [ // administracion
             'dashboard','inventario','kits','colegios',
-            'pedidos_tienda','produccion','reportes'
+            'pedidos_tienda','produccion','reportes',
+            'pedidos','proveedores','despachos'
         ],
         3 => [ // academia
             'dashboard','cursos','matriculas','pagos','academico','colegios'
@@ -182,6 +184,10 @@ class Auth {
         static $cache = [];
         $key = self::getRolId().'_'.$modulo.'_'.$accion;
         if (isset($cache[$key])) return $cache[$key];
+        $accionesValidas = ['ver', 'crear', 'editar', 'eliminar'];
+        if (!in_array($accion, $accionesValidas, true)) {
+            return $cache[$key] = false;
+        }
         try {
             $val = $db->query("SELECT `$accion` FROM rol_permisos
                 WHERE rol_id=".self::getRolId()." AND modulo=".$db->quote($modulo))->fetchColumn();
