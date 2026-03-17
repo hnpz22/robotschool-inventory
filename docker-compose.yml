@@ -68,6 +68,7 @@ services:
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
+      - ./scripts:/scripts:ro
     networks:
       - robotschool
     healthcheck:

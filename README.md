@@ -81,7 +81,19 @@ docker exec -i robotschool_db mysql \
 
 `schema.sql` crea todas las tablas y vistas. `seeds.sql` inserta los datos de referencia iniciales.
 
-### 5. Crear el primer usuario administrador
+### 5. Inicializar los buckets de MinIO (una sola vez)
+
+Con los contenedores corriendo, ejecutar desde el servidor:
+
+```bash
+docker compose exec minio sh /scripts/init-minio.sh
+```
+
+Esto crea los 6 buckets (`elementos`, `colegios`, `cursos`, `kits`, `despachos`, `documentos`) y les aplica política de descarga pública. El script es idempotente — si los buckets ya existen no falla.
+
+La consola web de MinIO queda disponible en `http://TU-IP-O-DOMINIO:9001`.
+
+### 6. Crear el primer usuario administrador
 
 Con los contenedores corriendo, abrir en el navegador:
 
