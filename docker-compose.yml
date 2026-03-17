@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
 
   # ── PHP + Apache ──────────────────────────────────────────────
@@ -47,7 +45,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "3306:3306"
+      - "${DB_PORT:-3308}:3308"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASS}"]
       interval: 10s
@@ -62,10 +60,10 @@ services:
     container_name: robotschool_pma
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${PMA_PORT:-8082}:80"
     environment:
       PMA_HOST:     db
-      PMA_PORT:     3306
+      PMA_PORT:     3308
       PMA_USER:     root
       PMA_PASSWORD: ${DB_ROOT_PASS}
       UPLOAD_LIMIT: 64M

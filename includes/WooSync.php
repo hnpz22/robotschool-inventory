@@ -185,7 +185,9 @@ class WooSync {
                 $sku   = $item['sku'] ?? null;
                 $kitId = null;
                 if ($sku) {
-                    $kitId = $this->db->query("SELECT id FROM kits WHERE codigo='" . $this->db->quote($sku) . "' AND activo=1 LIMIT 1")->fetchColumn() ?: null;
+                    $stKit = $this->db->prepare("SELECT id FROM kits WHERE codigo=? AND activo=1 LIMIT 1");
+                    $stKit->execute([$sku]);
+                    $kitId = $stKit->fetchColumn() ?: null;
                 }
                 // Intentar cruzar por nombre si no hay SKU
                 if (!$kitId) {

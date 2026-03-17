@@ -24,7 +24,7 @@ No se usa ningún framework PHP (sin Laravel, sin Symfony). La arquitectura es P
 - Docker Desktop 4.x o superior
 - Docker Compose v2 (`docker compose` sin guion)
 - Git
-- Puerto `8081` libre (app), `8080` libre (phpMyAdmin), `3306` libre (MySQL)
+- Puerto `8081` libre (app), `8080` libre (phpMyAdmin), `3308` libre (MySQL)
 
 Para desarrollo local sin Docker: XAMPP 8.x con PHP 8.1+ y MySQL/MariaDB.
 
@@ -61,7 +61,7 @@ docker compose up -d
 
 Esto levanta tres servicios:
 - `robotschool_app` — PHP 8.1 + Apache en `http://localhost:8081`
-- `robotschool_db` — MySQL 8.0 en `localhost:3306`
+- `robotschool_db` — MySQL 8.0 en `localhost:3308`
 - `robotschool_pma` — phpMyAdmin en `http://localhost:8080`
 
 El contenedor `app` espera a que la BD esté sana (`healthcheck`) antes de arrancar.

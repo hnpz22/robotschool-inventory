@@ -7,7 +7,7 @@
 -- Versión del servidor: 10.4.21-MariaDB
 -- Versión de PHP: 8.1.6
 
-CREATE DATABASE robotschool_inventory;
+CREATE DATABASE IF NOT EXISTS robotschool_inventory;
 USE robotschool_inventory;
 
 

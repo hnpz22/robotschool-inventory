@@ -56,9 +56,9 @@ try {
     ]);
     $elemId = $db->lastInsertId();
 
-    // Registrar código en secuencia
-    auditoria($db, 'elementos', $elemId, 'creado_desde_importacion', null, [
-        'codigo' => $codigo,
+    // Registrar auditoría
+    auditoria('creado_desde_importacion', 'elementos', $elemId, [], [
+        'codigo'           => $codigo,
         'codigo_proveedor' => $codProv,
     ]);
 

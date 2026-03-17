@@ -26,6 +26,14 @@ Options -Indexes
   # Elimina la cabecera que expone el servidor
   Header always unset X-Powered-By
   Header unset X-Powered-By
+
+  # Content-Security-Policy: restringe fuentes de recursos al propio dominio
+  # y a cdn.jsdelivr.net (Bootstrap + Bootstrap Icons).
+  # unsafe-inline es necesario porque el proyecto usa <style> y <script> inline.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+
+  # HTTP Strict Transport Security: fuerza HTTPS por 1 año (solo efectivo en producción con HTTPS)
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 </IfModule>
 
 # ── Bloquear ejecución PHP en uploads ─────────────────────────
