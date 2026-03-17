@@ -162,6 +162,15 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
     </li>
     <?php endif; ?>
 
+    <?php if (in_array('alistamiento', $_menu)): ?>
+    <li class="nav-item">
+      <a class="nav-link sidebar-link <?= ($activeMenu??'')==='alistamiento'?'active':'' ?>"
+         href="<?= APP_URL ?>/modules/alistamiento/">
+        <i class="bi bi-box-seam"></i> <span>Alistamiento</span>
+      </a>
+    </li>
+    <?php endif; ?>
+
     <!-- ── DESPACHOS (Admin/Gerencia) ── -->
     <?php if (in_array('despachos', $_menu)): ?>
     <li class="nav-item">

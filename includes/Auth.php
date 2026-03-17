@@ -7,20 +7,20 @@ class Auth {
     private static $ROL_MENUS = [
         1 => [ // gerencia
             'dashboard','inventario','kits','colegios','pedidos_tienda',
-            'produccion','cursos','matriculas','pagos','academico',
+            'produccion','alistamiento','cursos','matriculas','pagos','academico',
             'comercial','convenios','reportes','usuarios','config','categorias',
             'pedidos','proveedores','despachos'
         ],
         2 => [ // administracion
             'dashboard','inventario','kits','colegios',
-            'pedidos_tienda','produccion','reportes',
+            'pedidos_tienda','produccion','alistamiento','reportes',
             'pedidos','proveedores','despachos'
         ],
         3 => [ // academia
             'dashboard','cursos','matriculas','pagos','academico','colegios'
         ],
         4 => [ // produccion
-            'dashboard','inventario','kits','produccion'
+            'dashboard','inventario','kits','produccion','alistamiento'
         ],
         5 => [ // comercial
             'dashboard','comercial','convenios','colegios'

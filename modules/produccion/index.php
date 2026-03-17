@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cambiar_est
         if ($estado === 'listo') {
             $pedidoId = $db->query("SELECT pedido_id FROM solicitudes_produccion WHERE id=$sid")->fetchColumn();
             if ($pedidoId) {
-                $db->prepare("UPDATE tienda_pedidos SET estado='listo_envio' WHERE id=?")
+                $db->prepare("UPDATE tienda_pedidos SET estado='listo_produccion' WHERE id=?")
                    ->execute([$pedidoId]);
             }
         }
