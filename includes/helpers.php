@@ -140,6 +140,17 @@ function subirFoto(array $file, string $subdir='elementos'): ?string {
     return $subdir . '/' . $nombre;
 }
 
+// ── URL de foto (compatible con MinIO y con assets/uploads legacy) ──
+// Si $foto es una URL absoluta (MinIO) la retorna directamente.
+// Si es un path relativo (sistema anterior) le antepone UPLOAD_URL.
+function fotoUrl(?string $foto): string {
+    if (!$foto) return '';
+    if (str_starts_with($foto, 'http://') || str_starts_with($foto, 'https://')) {
+        return $foto;
+    }
+    return UPLOAD_URL . $foto;
+}
+
 // ── Paginación ──
 function paginar(int $total, int $pagina, int $porPagina=ITEMS_PER_PAGE): array {
     $totalPaginas = max(1, (int)ceil($total / $porPagina));

@@ -178,7 +178,7 @@ var ITEMS = <?= $itemsBD ? json_encode(array_map(function($i){
         'nombre' => $i['nombre'],
         'codigo' => $i['codigo'] ?? '',
         'cant'   => $i['cantidad'],
-        'foto'   => $i['foto'] ? UPLOAD_URL . $i['foto'] : '',
+        'foto'   => fotoUrl($i['foto']),
         'tipo'   => $i['tipo'],
     ];
 }, $itemsBD)) : '[]' ?>;

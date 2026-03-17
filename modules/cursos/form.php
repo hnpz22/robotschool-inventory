@@ -3,6 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
+require_once dirname(__DIR__, 2) . '/includes/Storage.php';
 Auth::check();
 
 $db = Database::get();
@@ -37,9 +38,21 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && Auth::csrfVerify($_POST['csrf']??''))
             'activo'           => 1,
         ];
 
-        // Manejo de imagen — usa subirFoto() que valida extensión, tamaño y MIME real
+        // Manejo de imagen — MinIO con fallback a assets/uploads/
         if (!empty($_FILES['imagen']['name']) && ($_FILES['imagen']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-            $data['imagen'] = subirFoto($_FILES['imagen'], 'cursos');
+            $file = $_FILES['imagen'];
+            $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $dest = 'curso_' . ($id ?: 'new') . '_' . time() . '.' . $ext;
+            try {
+                $imagenActual = $curso['imagen'] ?? null;
+                if ($imagenActual && (str_starts_with($imagenActual, 'http://') || str_starts_with($imagenActual, 'https://'))) {
+                    Storage::getInstance()->delete(MINIO_BUCKET_CURSOS, basename($imagenActual));
+                }
+                $data['imagen'] = Storage::getInstance()->upload($file['tmp_name'], MINIO_BUCKET_CURSOS, $dest);
+            } catch (Exception $e) {
+                error_log('Storage MinIO falló, usando fallback local: ' . $e->getMessage());
+                $data['imagen'] = subirFoto($file, 'cursos');
+            }
         }
 
         if ($id) {
@@ -88,7 +101,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     <div class="sc">
       <h6 class="fw-bold mb-3">Imagen del curso</h6>
       <?php if ($curso && $curso['imagen']): ?>
-        <img src="<?= UPLOAD_URL.htmlspecialchars($curso['imagen']) ?>" class="preview-img mb-2" id="imgPreview" alt="">
+        <img src="<?= htmlspecialchars(fotoUrl($curso['imagen'])) ?>" class="preview-img mb-2" id="imgPreview" alt="">
       <?php else: ?>
         <div class="preview-ph mb-2" id="imgPreview" onclick="document.getElementById('fileImg').click()">
           &#x1F4F7; Clic para subir imagen

@@ -160,7 +160,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <tr>
         <td>
           <?php if ($col['logo']): ?>
-            <img src="<?= UPLOAD_URL . htmlspecialchars($col['logo']) ?>" class="elem-foto" alt="">
+            <img src="<?= htmlspecialchars(fotoUrl($col['logo'])) ?>" class="elem-foto" alt="">
           <?php else: ?>
             <div class="elem-foto-placeholder" style="background:#eaf1fd;">&#x1F3EB;</div>
           <?php endif; ?>

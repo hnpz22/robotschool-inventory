@@ -3,6 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
+require_once dirname(__DIR__, 2) . '/includes/Storage.php';
 Auth::check();
 
 $db  = Database::get();
@@ -17,7 +18,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $logo = $col['logo'] ?? null;
         if (!empty($_FILES['logo']['tmp_name'])) {
-            $logo = subirFoto($_FILES['logo'], 'colegios');
+            $file = $_FILES['logo'];
+            $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $dest = $col
+                ? 'colegio_' . $id . '_' . time() . '.' . $ext
+                : 'colegio_'          . time() . '.' . $ext;
+            try {
+                if ($logo && (str_starts_with($logo, 'http://') || str_starts_with($logo, 'https://'))) {
+                    Storage::getInstance()->delete(MINIO_BUCKET_COLEGIOS, basename($logo));
+                }
+                $logo = Storage::getInstance()->upload($file['tmp_name'], MINIO_BUCKET_COLEGIOS, $dest);
+            } catch (Exception $e) {
+                error_log('Storage MinIO falló, usando fallback local: ' . $e->getMessage());
+                $logo = subirFoto($file, 'colegios');
+            }
         }
         $data = [
             'nombre'    => trim($_POST['nombre']),
@@ -155,7 +169,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <div class="section-card text-center">
         <h6 class="fw-bold mb-3"><i class="bi bi-image me-2 text-primary"></i>Logo del Colegio</h6>
         <?php if ($col && $col['logo']): ?>
-          <img src="<?= UPLOAD_URL . htmlspecialchars($col['logo']) ?>" id="logoPreview"
+          <img src="<?= htmlspecialchars(fotoUrl($col['logo'])) ?>" id="logoPreview"
                class="img-fluid rounded mb-2" style="max-height:150px;object-fit:contain;" alt="">
         <?php else: ?>
           <div class="bg-light rounded d-flex align-items-center justify-content-center mb-2" style="height:120px;">

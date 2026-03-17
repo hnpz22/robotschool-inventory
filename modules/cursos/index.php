@@ -156,7 +156,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 
     <!-- Imagen -->
     <?php if ($c['imagen']): ?>
-      <img src="<?= UPLOAD_URL.htmlspecialchars($c['imagen']) ?>" class="curso-img" alt="">
+      <img src="<?= htmlspecialchars(fotoUrl($c['imagen'])) ?>" class="curso-img" alt="">
     <?php else: ?>
       <div class="curso-img-ph" style="background:<?= $cat['color'] ?>15"><?= $cat['icon'] ?></div>
     <?php endif; ?>

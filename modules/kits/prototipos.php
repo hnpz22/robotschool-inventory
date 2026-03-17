@@ -80,7 +80,7 @@ $tipoColor = ['laser'=>'danger','impresion_3d'=>'primary','manual'=>'secondary',
   <div class="card stat-card h-100">
     <div class="card-body p-0">
       <?php if ($p['foto']): ?>
-        <img src="<?= UPLOAD_URL . htmlspecialchars($p['foto']) ?>" class="w-100 rounded-top"
+        <img src="<?= htmlspecialchars(fotoUrl($p['foto'])) ?>" class="w-100 rounded-top"
              style="height:140px;object-fit:cover;" alt="">
       <?php else: ?>
         <div class="w-100 rounded-top bg-light d-flex align-items-center justify-content-center"

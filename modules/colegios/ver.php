@@ -128,7 +128,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <div class="col-lg-4">
     <div class="sc text-center">
       <?php if ($col['logo']): ?>
-        <img src="<?= UPLOAD_URL.htmlspecialchars($col['logo']) ?>" class="img-fluid rounded mb-2" style="max-height:80px;object-fit:contain">
+        <img src="<?= htmlspecialchars(fotoUrl($col['logo'])) ?>" class="img-fluid rounded mb-2" style="max-height:80px;object-fit:contain">
       <?php else: ?>
         <div style="font-size:2.5rem;margin-bottom:.5rem">&#x1F3EB;</div>
       <?php endif; ?>

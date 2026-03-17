@@ -3,6 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
+require_once dirname(__DIR__, 2) . '/includes/Storage.php';
 Auth::check();
 
 $db  = Database::get();
@@ -17,7 +18,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     if (!Auth::csrfVerify($_POST['csrf'] ?? '')) die('CSRF');
     try {
         $foto = $kit['foto'] ?? null;
-        if (!empty($_FILES['foto']['tmp_name'])) $foto = subirFoto($_FILES['foto'], 'kits');
+        if (!empty($_FILES['foto']['tmp_name'])) {
+            $file = $_FILES['foto'];
+            $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $dest = $kit
+                ? 'kit_' . $id . '_' . time() . '.' . $ext
+                : 'kit_'       . time() . '.' . $ext;
+            try {
+                if ($foto && (str_starts_with($foto, 'http://') || str_starts_with($foto, 'https://'))) {
+                    Storage::getInstance()->delete(MINIO_BUCKET_KITS, basename($foto));
+                }
+                $foto = Storage::getInstance()->upload($file['tmp_name'], MINIO_BUCKET_KITS, $dest);
+            } catch (Exception $e) {
+                error_log('Storage MinIO falló, usando fallback local: ' . $e->getMessage());
+                $foto = subirFoto($file, 'kits');
+            }
+        }
 
         $data = [
             'nombre'             => trim($_POST['nombre']),
@@ -216,7 +232,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <div class="section-card text-center">
         <h6 class="fw-bold mb-2"><i class="bi bi-image me-2 text-primary"></i>Imagen del Kit</h6>
         <?php if ($kit && $kit['foto']): ?>
-          <img src="<?= UPLOAD_URL . htmlspecialchars($kit['foto']) ?>" id="kitFotoPreview"
+          <img src="<?= htmlspecialchars(fotoUrl($kit['foto'])) ?>" id="kitFotoPreview"
                class="img-fluid rounded mb-2 w-100" style="max-height:130px;object-fit:cover;">
         <?php else: ?>
           <div class="bg-light rounded d-flex align-items-center justify-content-center mb-2" style="height:90px;font-size:2.5rem;">&#x1F916;</div>
@@ -317,7 +333,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           <div class="list-group-item px-0 py-2 border-0 border-bottom">
             <div class="d-flex align-items-center gap-2">
               <?php if ($ke['foto']): ?>
-                <img src="<?= UPLOAD_URL . htmlspecialchars($ke['foto']) ?>" class="elem-foto" style="width:38px;height:38px;" alt="">
+                <img src="<?= htmlspecialchars(fotoUrl($ke['foto'])) ?>" class="elem-foto" style="width:38px;height:38px;" alt="">
               <?php else: ?>
                 <div class="elem-foto-placeholder" style="width:38px;height:38px;font-size:1rem;flex-shrink:0;"><i class="bi bi-cpu"></i></div>
               <?php endif; ?>
@@ -415,7 +431,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           <div class="list-group-item px-0 py-2 border-0 border-bottom">
             <div class="d-flex align-items-center gap-2">
               <?php if ($kp['foto']): ?>
-                <img src="<?= UPLOAD_URL . htmlspecialchars($kp['foto']) ?>" class="elem-foto" style="width:38px;height:38px;" alt="">
+                <img src="<?= htmlspecialchars(fotoUrl($kp['foto'])) ?>" class="elem-foto" style="width:38px;height:38px;" alt="">
               <?php else: ?>
                 <div class="elem-foto-placeholder" style="width:38px;height:38px;flex-shrink:0;background:#fff0f0;color:#dc3545;font-size:1.2rem;">✂️</div>
               <?php endif; ?>

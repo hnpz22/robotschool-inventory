@@ -182,7 +182,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   </div>
   <div class="col-md-5">
     <?php if ($curso['imagen']): ?>
-    <img src="<?= UPLOAD_URL.htmlspecialchars($curso['imagen']) ?>" class="w-100 rounded mb-3" style="max-height:200px;object-fit:cover">
+    <img src="<?= htmlspecialchars(fotoUrl($curso['imagen'])) ?>" class="w-100 rounded mb-3" style="max-height:200px;object-fit:cover">
     <?php endif; ?>
     <?php if (!empty($temArr)): ?>
     <div class="sc">

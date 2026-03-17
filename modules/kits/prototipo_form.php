@@ -268,7 +268,7 @@ $tiposActivos = $pro ? explode(',', $pro['tipo_fabricacion']) : [];
       <div class="section-card">
         <h6 class="fw-bold mb-3"><i class="bi bi-image me-2 text-primary"></i>Foto del Prototipo</h6>
         <?php if ($pro && $pro['foto']): ?>
-          <img src="<?= UPLOAD_URL . htmlspecialchars($pro['foto']) ?>" id="fotoPreview"
+          <img src="<?= htmlspecialchars(fotoUrl($pro['foto'])) ?>" id="fotoPreview"
                class="img-fluid rounded mb-2 w-100" style="max-height:160px;object-fit:cover;">
         <?php else: ?>
           <div class="bg-light rounded text-center p-4 mb-2">

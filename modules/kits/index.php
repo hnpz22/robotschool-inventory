@@ -155,7 +155,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 
     <!-- Foto o placeholder -->
     <?php if ($k['foto']): ?>
-      <img src="<?= UPLOAD_URL.htmlspecialchars($k['foto']) ?>" class="kit-foto" alt="">
+      <img src="<?= htmlspecialchars(fotoUrl($k['foto'])) ?>" class="kit-foto" alt="">
     <?php else: ?>
       <div class="kit-foto-ph">&#x1F4E6;</div>
     <?php endif; ?>
