@@ -276,46 +276,62 @@ $colegios_pedidos = $db->query("
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-.sem-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex-shrink:0}
-.sem-verde    {background:#22c55e;box-shadow:0 0 0 3px #dcfce7}
-.sem-amarillo {background:#f59e0b;box-shadow:0 0 0 3px #fef9c3}
-.sem-rojo     {background:#ef4444;box-shadow:0 0 0 3px #fee2e2}
-.sem-completado{background:#94a3b8;box-shadow:0 0 0 3px #f1f5f9}
-.stat-chip{border-radius:10px;padding:.35rem .8rem;font-size:.8rem;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:.35rem;cursor:pointer;border:1px solid transparent;transition:.1s}
-.stat-chip:hover{filter:brightness(.95)}
-.stat-chip.activo{outline:2px solid currentColor}
+/* ── Semáforo ── */
+.sem-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
+.sem-verde    {background:#22c55e}
+.sem-amarillo {background:#f59e0b}
+.sem-rojo     {background:#ef4444}
+.sem-completado{background:#94a3b8}
+/* ── Tabs de estado ── */
+.estado-tabs{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.85rem}
+.estado-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .75rem;border-radius:20px;
+            font-size:.78rem;font-weight:600;text-decoration:none;border:1.5px solid transparent;
+            transition:.12s;white-space:nowrap;color:#475569;background:#f1f5f9;border-color:#e2e8f0}
+.estado-tab:hover{filter:brightness(.96);color:#1e293b}
+.estado-tab.activo{border-color:currentColor;box-shadow:0 0 0 2px currentColor20}
+.tab-cnt{font-size:.7rem;font-weight:700;padding:.05rem .35rem;border-radius:10px;background:rgba(0,0,0,.12)}
+/* ── Sem chips ── */
+.sem-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;border-radius:20px;
+          font-size:.73rem;font-weight:600;text-decoration:none;border:1px solid transparent;transition:.1s}
+.sem-chip:hover{filter:brightness(.95)}
+.sem-chip.activo{outline:2px solid currentColor;outline-offset:1px}
+/* ── Tabla ── */
 .section-card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.rt thead th{background:#1e293b;color:#fff;padding:.5rem .75rem;font-size:.74rem;font-weight:600;white-space:nowrap;border:none}
-.rt tbody td{padding:.45rem .75rem;font-size:.81rem;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.rt thead th{background:#1e293b;color:#fff;padding:.45rem .7rem;font-size:.73rem;font-weight:600;white-space:nowrap;border:none}
+.rt tbody td{padding:.4rem .7rem;font-size:.8rem;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 .rt tbody tr:hover td{background:#f8fafc}
-.estado-sel{font-size:.73rem;padding:.2rem .35rem;border-radius:6px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;max-width:130px}
-.borde-rojo      td:first-child{border-left:4px solid #ef4444!important}
-.borde-amarillo  td:first-child{border-left:4px solid #f59e0b!important}
-.borde-verde     td:first-child{border-left:4px solid #22c55e!important}
+.borde-rojo       td:first-child{border-left:4px solid #ef4444!important}
+.borde-amarillo   td:first-child{border-left:4px solid #f59e0b!important}
+.borde-verde      td:first-child{border-left:4px solid #22c55e!important}
 .borde-completado td:first-child{border-left:4px solid #94a3b8!important;opacity:.8}
+/* ── Estado dropdown ── */
+.estado-sel{font-size:.72rem;padding:.18rem .3rem;border-radius:6px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;max-width:130px}
+/* ── Action buttons ── */
+.btn-act{font-size:.68rem;padding:.15rem .4rem;white-space:nowrap;border-radius:6px}
+/* ── Upload area ── */
 .upload-area{border:2px dashed #cbd5e1;border-radius:14px;padding:3rem;text-align:center;cursor:pointer}
 .upload-area:hover{background:#f8fafc}
-.chk-row{width:16px;height:16px;cursor:pointer;accent-color:#185FA5}
-.barra-sel{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;border-radius:14px;padding:.6rem 1.2rem;display:none;align-items:center;gap:.75rem;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:1000;white-space:nowrap}
+/* ── Selección múltiple ── */
+.chk-row{width:15px;height:15px;cursor:pointer;accent-color:#185FA5}
+.barra-sel{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;
+           border-radius:14px;padding:.6rem 1.2rem;display:none;align-items:center;gap:.75rem;
+           box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:1000;white-space:nowrap}
 .barra-sel.visible{display:flex}
 tr.fila-sel td{background:#eff6ff!important}
-.btn-aprobar{font-size:.7rem;padding:.15rem .45rem;white-space:nowrap}
 </style>
 
-<!-- Cabecera -->
+<!-- ── Cabecera ── -->
 <div class="d-flex align-items-center justify-content-between mb-3">
   <div>
     <h4 class="fw-bold mb-0">&#x1F6D2; Pedidos Tienda Online</h4>
-    <p class="text-muted small mb-0"><?= $stats['total'] ?> pedidos en base de datos</p>
+    <p class="text-muted small mb-0"><?= $stats['total'] ?> pedidos en total</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <?php if (!empty($pedidos)): ?>
-    <a href="stickers.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank" class="btn btn-danger btn-sm">
-      <i class="bi bi-printer me-1"></i>Etiquetas
-    </a>
-    <a href="lista_imprimible.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-list-ul me-1"></i>Lista
-    </a>
+    <a href="stickers.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
+       class="btn btn-danger btn-sm"><i class="bi bi-printer me-1"></i>Etiquetas</a>
+    <a href="lista_imprimible.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
+       class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul me-1"></i>Lista</a>
     <?php endif; ?>
     <a href="<?= APP_URL ?>/modules/alistamiento/" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-box-seam me-1"></i>Alistamiento
@@ -326,45 +342,65 @@ tr.fila-sel td{background:#eff6ff!important}
   </div>
 </div>
 
-<?php if ($error):   ?><div class="alert alert-danger   py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
-<?php if ($success): ?><div class="alert alert-success  py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
+<?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
+<?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 
-<!-- Chips de semáforo y estado -->
 <?php
+// ── Helper URL manteniendo parámetros actuales ──
 function urlFiltro(array $override): string {
-    $actual = ['estado'=>$GLOBALS['fEstado'],'sem'=>$GLOBALS['fSem'],
-               'colegio'=>$GLOBALS['fColegio'],'q'=>$GLOBALS['fBusqRaw'] ?? ''];
+    $actual = ['estado' => $GLOBALS['fEstado'], 'sem' => $GLOBALS['fSem'],
+               'colegio'=> $GLOBALS['fColegio'], 'q'  => $GLOBALS['fBusqRaw'] ?? ''];
     $params = array_filter(array_merge($actual, $override), fn($v) => $v !== '');
     return '?' . http_build_query($params);
 }
+
+// ── Tabs de estado ──
+$tabs = [
+    ''                => ['label' => 'Todos',          'cnt' => $stats['total'],                'bg' => '#f1f5f9', 'txt' => '#475569'],
+    'pendiente'       => ['label' => 'Pendiente',      'cnt' => $stats['cnt_pendiente'],        'bg' => '#fef9c3', 'txt' => '#854d0e'],
+    'aprobado'        => ['label' => 'Aprobado',       'cnt' => $stats['cnt_aprobado'],         'bg' => '#dbeafe', 'txt' => '#1d4ed8'],
+    'en_produccion'   => ['label' => 'En producción',  'cnt' => $stats['cnt_en_produccion'],    'bg' => '#ffedd5', 'txt' => '#9a3412'],
+    'listo_produccion'=> ['label' => 'Listo',          'cnt' => $stats['cnt_listo_produccion'], 'bg' => '#d1fae5', 'txt' => '#065f46'],
+    'en_alistamiento' => ['label' => 'Alistamiento',   'cnt' => $stats['cnt_en_alistamiento'],  'bg' => '#ede9fe', 'txt' => '#5b21b6'],
+    'despachado'      => ['label' => 'Despachado',     'cnt' => $stats['cnt_despachado'],       'bg' => '#bbf7d0', 'txt' => '#14532d'],
+];
 ?>
-<div class="d-flex flex-wrap gap-2 mb-3">
-  <a href="<?= urlFiltro(['sem'=>'rojo','estado'=>'']) ?>"
-     class="stat-chip <?= $fSem==='rojo'?'activo':'' ?>"
-     style="background:#fee2e2;color:#991b1b">
-    <span class="sem-dot sem-rojo"></span><?= $stats['rojos'] ?> Urgentes &gt;7d
-  </a>
-  <a href="<?= urlFiltro(['sem'=>'amarillo','estado'=>'']) ?>"
-     class="stat-chip <?= $fSem==='amarillo'?'activo':'' ?>"
-     style="background:#fef9c3;color:#854d0e">
-    <span class="sem-dot sem-amarillo"></span><?= $stats['amarillos'] ?> En riesgo
-  </a>
-  <a href="<?= urlFiltro(['sem'=>'verde','estado'=>'']) ?>"
-     class="stat-chip <?= $fSem==='verde'?'activo':'' ?>"
-     style="background:#dcfce7;color:#166534">
-    <span class="sem-dot sem-verde"></span><?= $stats['verdes'] ?> Al d&iacute;a
-  </a>
-  <span style="border-left:1px solid #e2e8f0;margin:0 .25rem"></span>
-  <?php foreach ($ESTADOS as $k => $e): ?>
-  <a href="<?= urlFiltro(['estado'=>$k,'sem'=>'']) ?>"
-     class="stat-chip <?= $fEstado===$k?'activo':'' ?>"
-     style="background:<?= $e['bg'] ?>;color:<?= $e['txt'] ?>">
-    <?= strip_tags($e['label']) ?>: <?= $stats[$statMap[$k]] ?? 0 ?>
+
+<!-- ── Tabs de estado ── -->
+<div class="estado-tabs">
+  <?php foreach ($tabs as $k => $t):
+    $activo = ($fEstado === $k) && !$fSem;
+  ?>
+  <a href="<?= urlFiltro(['estado' => $k, 'sem' => '', 'pag' => '']) ?>"
+     class="estado-tab <?= $activo ? 'activo' : '' ?>"
+     style="background:<?= $t['bg'] ?>;color:<?= $t['txt'] ?>;<?= $activo ? 'border-color:'.$t['txt'] : '' ?>">
+    <?= htmlspecialchars($t['label']) ?>
+    <span class="tab-cnt"><?= (int)($t['cnt'] ?? 0) ?></span>
   </a>
   <?php endforeach; ?>
-  <?php if ($fEstado || $fSem || $fColegio || ($fBusqRaw??'')): ?>
-  <a href="?" class="stat-chip" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0">
-    &#10005; Limpiar
+</div>
+
+<!-- ── Semáforo (chips secundarios) ── -->
+<div class="d-flex gap-2 flex-wrap align-items-center mb-3">
+  <span class="text-muted" style="font-size:.72rem;font-weight:600">Semáforo:</span>
+  <a href="<?= urlFiltro(['sem'=>'rojo','estado'=>'','pag'=>'']) ?>"
+     class="sem-chip <?= $fSem==='rojo'?'activo':'' ?>"
+     style="background:#fee2e2;color:#991b1b;border-color:#fca5a5">
+    <span class="sem-dot sem-rojo"></span><?= $stats['rojos'] ?> &gt;7d
+  </a>
+  <a href="<?= urlFiltro(['sem'=>'amarillo','estado'=>'','pag'=>'']) ?>"
+     class="sem-chip <?= $fSem==='amarillo'?'activo':'' ?>"
+     style="background:#fef9c3;color:#854d0e;border-color:#fde68a">
+    <span class="sem-dot sem-amarillo"></span><?= $stats['amarillos'] ?> 6-7d
+  </a>
+  <a href="<?= urlFiltro(['sem'=>'verde','estado'=>'','pag'=>'']) ?>"
+     class="sem-chip <?= $fSem==='verde'?'activo':'' ?>"
+     style="background:#dcfce7;color:#166534;border-color:#86efac">
+    <span class="sem-dot sem-verde"></span><?= $stats['verdes'] ?> &le;5d
+  </a>
+  <?php if ($fEstado || $fSem || $fColegio || ($fBusqRaw ?? '')): ?>
+  <a href="?" class="sem-chip ms-2" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0">
+    &#10005; Limpiar filtros
   </a>
   <?php endif; ?>
 </div>
@@ -380,49 +416,41 @@ if ($totalGlobal == 0): ?>
 </div>
 <?php else: ?>
 
-<!-- Filtros -->
-<div class="section-card">
-  <form method="GET" class="row g-2 align-items-end">
-    <div class="col-12 col-md-3">
+<!-- ── Búsqueda y filtros secundarios ── -->
+<div class="section-card py-2">
+  <form method="GET" class="row g-2 align-items-center">
+    <?php if ($fEstado): ?><input type="hidden" name="estado" value="<?= htmlspecialchars($fEstado) ?>"><?php endif; ?>
+    <div class="col-12 col-md-4">
       <input type="text" name="q" class="form-control form-control-sm"
-             placeholder="Nombre, kit o #pedido..."
+             placeholder="&#x1F50D; Nombre, kit o #pedido..."
              value="<?= htmlspecialchars($fBusqRaw ?? $fBusq) ?>">
     </div>
-    <div class="col-6 col-md-2">
-      <select name="estado" class="form-select form-select-sm">
-        <option value="">Todos los estados</option>
-        <?php foreach ($ESTADOS as $k => $e): ?>
-          <option value="<?= $k ?>" <?= $fEstado===$k?'selected':'' ?>><?= strip_tags($e['label']) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-3">
       <select name="sem" class="form-select form-select-sm">
-        <option value="">Sem&aacute;foro</option>
-        <option value="rojo"       <?= $fSem==='rojo'      ?'selected':'' ?>>Urgente &gt;7d</option>
-        <option value="amarillo"   <?= $fSem==='amarillo'  ?'selected':'' ?>>En riesgo 5-7d</option>
-        <option value="verde"      <?= $fSem==='verde'     ?'selected':'' ?>>Al d&iacute;a</option>
-        <option value="completado" <?= $fSem==='completado'?'selected':'' ?>>Completados</option>
+        <option value="">Sem&aacute;foro (todos)</option>
+        <option value="rojo"       <?= $fSem==='rojo'      ?'selected':'' ?>>&#x1F534; Urgente &gt;7d</option>
+        <option value="amarillo"   <?= $fSem==='amarillo'  ?'selected':'' ?>>&#x1F7E1; En riesgo 6-7d</option>
+        <option value="verde"      <?= $fSem==='verde'     ?'selected':'' ?>>&#x1F7E2; Al d&iacute;a &le;5d</option>
+        <option value="completado" <?= $fSem==='completado'?'selected':'' ?>>&#x26AB; Completados</option>
       </select>
     </div>
-    <div class="col-12 col-md-3">
+    <div class="col-6 col-md-3">
       <select name="colegio" class="form-select form-select-sm">
         <option value="">Todos los colegios</option>
         <?php foreach ($colegios_pedidos as $c):
-          $val = $c['nombre_csv'] ?: $c['nombre_display'];
-        ?>
-          <option value="<?= htmlspecialchars($val) ?>" <?= $fColegio===$val?'selected':'' ?>><?= htmlspecialchars($c['nombre_display'] ?: $val) ?></option>
+          $val = $c['nombre_csv'] ?: $c['nombre_display']; ?>
+          <option value="<?= htmlspecialchars($val) ?>" <?= $fColegio===$val?'selected':'' ?>>
+            <?= htmlspecialchars($c['nombre_display'] ?: $val) ?></option>
         <?php endforeach; ?>
       </select>
     </div>
-    <div class="col-auto"><button type="submit" class="btn btn-primary btn-sm">Filtrar</button></div>
-    <?php if ($fBusq||$fEstado||$fSem||$fColegio): ?>
-    <div class="col-auto"><a href="?" class="btn btn-outline-secondary btn-sm">Limpiar</a></div>
-    <?php endif; ?>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+    </div>
   </form>
 </div>
 
-<!-- Tabla -->
+<!-- ── Tabla de pedidos ── -->
 <?php if (empty($pedidos)): ?>
   <div class="section-card text-center text-muted py-5">
     <i class="bi bi-inbox fs-2 d-block mb-2"></i>Sin resultados para los filtros aplicados.
@@ -430,24 +458,26 @@ if ($totalGlobal == 0): ?>
 <?php else: ?>
 <div class="section-card p-0" style="overflow:hidden">
   <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
-    <span class="small text-muted fw-semibold"><?= $total ?> pedidos &mdash; p&aacute;gina <?= $pagina ?> de <?= $totalPags ?></span>
-    <a href="stickers.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank" class="btn btn-danger btn-sm">
-      <i class="bi bi-printer me-1"></i>Etiquetas (6/hoja)
-    </a>
+    <span class="small text-muted fw-semibold">
+      <?= $total ?> pedido<?= $total != 1 ? 's' : '' ?>
+      <?php if ($totalPags > 1): ?>&mdash; p&aacute;g. <?= $pagina ?>/<?= $totalPags ?><?php endif; ?>
+    </span>
+    <a href="stickers.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
+       class="btn btn-danger btn-sm"><i class="bi bi-printer me-1"></i>Etiquetas (6/hoja)</a>
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0 rt">
       <thead><tr>
-        <th style="width:36px;text-align:center">
-          <input type="checkbox" class="chk-row" id="chk-all" title="Seleccionar todos" onchange="selTodos(this.checked)">
+        <th style="width:32px;text-align:center">
+          <input type="checkbox" class="chk-row" id="chk-all" title="Seleccionar todos"
+                 onchange="selTodos(this.checked)">
         </th>
-        <th></th>
-        <th>#WOO</th>
-        <th>Fecha</th>
+        <th style="width:14px"></th>
+        <th>#Orden</th>
         <th>Cliente</th>
-        <th>Colegio</th>
         <th>Kit</th>
-        <th>D&iacute;as</th>
+        <th style="text-align:center">Cant.</th>
+        <th style="text-align:center">D&iacute;as</th>
         <th>Estado</th>
         <th>Acciones</th>
       </tr></thead>
@@ -457,58 +487,62 @@ if ($totalGlobal == 0): ?>
       foreach ($pedidos as $p):
         $sc  = $semCol[$p['semaforo']] ?? '#ccc';
         $est = $ESTADOS[$p['estado']] ?? ['label'=>$p['estado'],'bg'=>'#f1f5f9','txt'=>'#475569'];
+        $cant = (int)($p['cantidad'] ?? 1);
       ?>
       <tr class="borde-<?= $p['semaforo'] ?>" id="fila-<?= $p['id'] ?>">
-        <td style="text-align:center;border-left:4px solid <?= $sc ?>;padding:.45rem .5rem">
+        <td style="text-align:center;border-left:4px solid <?= $sc ?>;padding:.4rem .45rem">
           <input type="checkbox" class="chk-row chk-pedido"
-                 value="<?= $p['id'] ?>"
-                 data-order="<?= htmlspecialchars($p['woo_order_id']) ?>"
+                 value="<?= $p['id'] ?>" data-order="<?= htmlspecialchars($p['woo_order_id']) ?>"
                  onchange="actualizarSel()">
         </td>
-        <td><span class="sem-dot sem-<?= $p['semaforo'] ?>"></span></td>
+        <td><span class="sem-dot sem-<?= $p['semaforo'] ?>" title="<?= $p['semaforo'] ?>"></span></td>
         <td class="fw-semibold" style="white-space:nowrap">
-          <a href="ver.php?id=<?= $p['id'] ?>" class="text-decoration-none">#<?= htmlspecialchars($p['woo_order_id']) ?></a>
+          #<?= htmlspecialchars($p['woo_order_id']) ?>
         </td>
-        <td style="white-space:nowrap"><?= rbs_fecha_fmt($p['fecha_compra']) ?></td>
         <td>
-          <div class="fw-semibold" style="font-size:.82rem"><?= htmlspecialchars($p['cliente_nombre']) ?></div>
-          <?php if ($p['cliente_telefono']): ?><div class="text-muted" style="font-size:.72rem"><?= htmlspecialchars($p['cliente_telefono']) ?></div><?php endif; ?>
+          <div class="fw-semibold" style="font-size:.81rem"><?= htmlspecialchars($p['cliente_nombre']) ?></div>
+          <?php if ($p['cliente_telefono']): ?>
+            <div class="text-muted" style="font-size:.71rem"><?= htmlspecialchars($p['cliente_telefono']) ?></div>
+          <?php endif; ?>
+          <?php if ($p['colegio_bd'] || $p['colegio_nombre']): ?>
+            <div style="font-size:.7rem;color:#1d4ed8">
+              <i class="bi bi-building" style="font-size:.65rem"></i>
+              <?= htmlspecialchars($p['colegio_bd'] ?: $p['colegio_nombre']) ?>
+            </div>
+          <?php endif; ?>
         </td>
-        <td style="color:#1d4ed8;font-size:.78rem;max-width:130px">
-          <?= $p['colegio_bd']
-                ? htmlspecialchars($p['colegio_bd'])
-                : ($p['colegio_nombre'] ? htmlspecialchars($p['colegio_nombre']) : '<span class="text-muted">&mdash;</span>') ?>
-        </td>
-        <td style="max-width:150px;font-size:.77rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+        <td style="max-width:160px;font-size:.77rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
             title="<?= htmlspecialchars($p['kit_nombre'] ?? '') ?>">
           <?= htmlspecialchars($p['kit_nombre'] ?? '—') ?>
         </td>
-        <td style="text-align:center;font-weight:700;color:<?= $sc ?>"><?= $p['dias'] ?>d</td>
+        <td style="text-align:center;font-size:.78rem;font-weight:600"><?= $cant ?></td>
+        <td style="text-align:center;font-weight:700;color:<?= $sc ?>;font-size:.8rem"><?= $p['dias'] ?>d</td>
         <td>
-          <span class="badge" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.71rem">
+          <span class="badge" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.7rem">
             <?= strip_tags($est['label']) ?>
           </span>
         </td>
         <td>
           <div class="d-flex gap-1 align-items-center flex-wrap">
-            <!-- Botón Aprobar: solo pendiente + Gerencia/Administración -->
             <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
             <form method="POST" style="display:inline">
               <input type="hidden" name="action"    value="aprobar">
               <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
               <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-              <button type="submit" class="btn btn-primary btn-aprobar"
+              <button type="submit" class="btn btn-success btn-act"
                       onclick="return confirm('Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
-                <i class="bi bi-check-lg me-1"></i>Aprobar
+                <i class="bi bi-check-lg"></i> Aprobar
               </button>
             </form>
             <?php endif; ?>
-            <!-- Cambio rápido de estado -->
+            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-act" title="Editar">
+              <i class="bi bi-pencil"></i>
+            </a>
             <form method="POST" style="display:inline">
               <input type="hidden" name="action"    value="cambiar_estado">
               <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
               <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-              <select name="estado_nuevo" class="estado-sel" onchange="this.form.submit()">
+              <select name="estado_nuevo" class="estado-sel" onchange="this.form.submit()" title="Cambiar estado">
                 <?php foreach ($ESTADOS as $k => $e): ?>
                   <option value="<?= $k ?>" <?= $p['estado']===$k?'selected':'' ?>><?= strip_tags($e['label']) ?></option>
                 <?php endforeach; ?>
@@ -521,6 +555,7 @@ if ($totalGlobal == 0): ?>
       </tbody>
     </table>
   </div>
+
   <?php if ($totalPags > 1): ?>
   <div class="px-3 py-2 border-top">
     <nav><ul class="pagination pagination-sm mb-0 justify-content-center">
@@ -537,7 +572,7 @@ if ($totalGlobal == 0): ?>
 <?php endif; ?>
 <?php endif; ?>
 
-<!-- Barra flotante de selección múltiple -->
+<!-- ── Barra flotante selección múltiple ── -->
 <div class="barra-sel" id="barra-sel">
   <span style="font-size:.85rem;font-weight:700"><span id="cnt-sel">0</span> pedido(s)</span>
   <div class="d-flex gap-2">
@@ -553,12 +588,11 @@ function actualizarSel() {
     var chks  = document.querySelectorAll('.chk-pedido:checked');
     var todos = document.querySelectorAll('.chk-pedido');
     var n     = chks.length;
-    var barra = document.getElementById('barra-sel');
     document.getElementById('cnt-sel').textContent = n;
     document.querySelectorAll('.chk-pedido').forEach(function(c) {
         c.closest('tr').classList.toggle('fila-sel', c.checked);
     });
-    barra.classList.toggle('visible', n > 0);
+    document.getElementById('barra-sel').classList.toggle('visible', n > 0);
     var allChk = document.getElementById('chk-all');
     allChk.indeterminate = n > 0 && n < todos.length;
     allChk.checked = n > 0 && n === todos.length;

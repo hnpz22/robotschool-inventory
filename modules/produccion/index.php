@@ -186,43 +186,83 @@ $convs     = $db->query("SHOW TABLES LIKE 'convenios'")->fetchColumn() ?
 $pedidos   = $db->query("SELECT id,woo_order_id AS numero_pedido FROM tienda_pedidos WHERE estado NOT IN ('entregado','cancelado') ORDER BY created_at DESC LIMIT 50")->fetchAll();
 $usuarios  = $db->query("SELECT id,nombre FROM usuarios WHERE activo=1 ORDER BY nombre")->fetchAll();
 
+// ── Historial batch: últimos 3 movimientos por solicitud ──────────
+$histMap = [];
+$solIds  = array_column($solicitudes, 'id');
+if (!empty($solIds)) {
+    $inList   = implode(',', array_map('intval', $solIds));
+    $histRows = $db->query("
+        SELECT h.solicitud_id, h.estado, h.comentario, h.created_at, u.nombre AS usuario_nombre
+        FROM solicitud_historial h
+        LEFT JOIN usuarios u ON u.id = h.usuario_id
+        WHERE h.solicitud_id IN ($inList)
+        ORDER BY h.solicitud_id, h.created_at DESC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($histRows as $hr) {
+        $sid = $hr['solicitud_id'];
+        if (!isset($histMap[$sid])) $histMap[$sid] = [];
+        if (count($histMap[$sid]) < 3) $histMap[$sid][] = $hr;
+    }
+}
+
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-.tablero-col{background:#fff;border-radius:14px;border:1.5px solid #e2e8f0;min-height:200px}
-.sol-card{background:#fff;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:.6rem;
-          transition:.15s;overflow:hidden}
-.sol-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.08)}
-.sol-card-header{padding:.5rem .75rem;display:flex;align-items:center;justify-content:space-between}
-.sol-card-body{padding:.5rem .75rem .6rem}
-.fuente-badge{font-size:.65rem;padding:.15rem .45rem;border-radius:20px;font-weight:700;display:inline-flex;align-items:center;gap:.25rem}
-.prior-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
-.stat-col{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:.75rem 1rem;text-align:center;cursor:pointer;transition:.15s}
-.stat-col:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.06)}
-.stat-col.activo{border-width:2px}
-.prog-bar{height:4px;border-radius:2px;background:#e2e8f0;overflow:hidden;margin-top:4px}
-.prog-fill{height:100%;background:#22c55e;border-radius:2px;transition:.3s}
-.kanban-header{padding:.5rem .75rem;border-radius:10px 10px 0 0;font-size:.78rem;font-weight:700}
-/* Modal Nueva Solicitud - scroll forzado */
-#modalNueva .modal-body{
-  overflow-y:auto !important;
-  max-height:calc(100vh - 200px) !important;
-}
-#modalNueva .modal-dialog{
-  margin:.5rem auto;
-}
+/* ── Kanban layout ── */
+.tablero-col{background:#fff;border-radius:14px;border:1.5px solid #e2e8f0;overflow:hidden}
+.tablero-col.collapsed .col-body{display:none}
+.col-header{padding:.6rem .9rem;display:flex;align-items:center;justify-content:space-between;
+            cursor:pointer;user-select:none;transition:.12s}
+.col-header:hover{filter:brightness(.97)}
+.col-toggle-arrow{transition:transform .2s;font-size:.8rem}
+.tablero-col.collapsed .col-toggle-arrow{transform:rotate(-90deg)}
+.col-body{padding:.55rem;min-height:60px}
+
+/* ── Tarjeta solicitud ── */
+.sol-card{background:#fff;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:.5rem;overflow:hidden;transition:.12s}
+.sol-card:hover{box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.sol-compact{padding:.5rem .65rem}
+.sol-detail{padding:.5rem .65rem .6rem;border-top:1px solid #f1f5f9;display:none}
+.sol-detail.open{display:block}
+
+/* ── Prioridad badge ── */
+.prior-badge{font-size:.62rem;font-weight:700;padding:.1rem .4rem;border-radius:10px;
+             display:inline-flex;align-items:center;gap:.2rem;white-space:nowrap}
+/* ── Fuente badge ── */
+.fuente-badge{font-size:.62rem;padding:.1rem .4rem;border-radius:10px;font-weight:600;
+              display:inline-flex;align-items:center;gap:.2rem}
+/* ── Progress bar ── */
+.prog-bar{height:3px;border-radius:2px;background:#e2e8f0;overflow:hidden;margin-top:3px}
+.prog-fill{height:100%;background:#22c55e;border-radius:2px}
+
+/* ── Historial ── */
+.hist-row{font-size:.71rem;color:#64748b;padding:.15rem 0;border-bottom:1px solid #f8fafc}
+.hist-row:last-child{border-bottom:none}
+
+/* ── Inline action buttons ── */
+.btn-inline{font-size:.68rem;padding:.2rem .5rem;border-radius:6px;white-space:nowrap;font-weight:600}
+
+/* ── Stat chips arriba ── */
+.stat-chip-sm{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:10px;
+              font-size:.75rem;font-weight:600;text-decoration:none;border:1px solid transparent;
+              cursor:pointer;transition:.1s}
+.stat-chip-sm:hover{filter:brightness(.95)}
+
+/* ── Modal nueva solicitud ── */
+#modalNueva .modal-body{overflow-y:auto!important;max-height:calc(100vh - 200px)!important}
+#modalNueva .modal-dialog{margin:.5rem auto}
 </style>
 
 <div class="d-flex align-items-center justify-content-between mb-3">
   <div>
     <h4 class="fw-bold mb-0"><i class="bi bi-kanban me-2"></i>Tablero de Producci&oacute;n</h4>
-    <p class="text-muted small mb-0">Solicitudes de todas las fuentes en tiempo real</p>
+    <p class="text-muted small mb-0">Solicitudes de todas las fuentes &mdash; <?= array_sum($stats) ?> total</p>
   </div>
   <div class="d-flex gap-2">
-    <a href="cronograma.php" class="btn btn-outline-primary fw-bold">
+    <a href="cronograma.php" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-calendar3 me-1"></i>Cronograma
     </a>
-    <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#modalNueva">
+    <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalNueva">
       <i class="bi bi-plus-lg me-1"></i>Nueva Solicitud
     </button>
   </div>
@@ -231,193 +271,260 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 
-<!-- Stats por estado -->
-<div class="row g-2 mb-3">
+<!-- ── Chips de estado + filtro fuente ── -->
+<div class="d-flex gap-2 flex-wrap align-items-center mb-3">
   <?php foreach ($ESTADOS as $ek => $ev): ?>
-  <div class="col-6 col-md-3">
-    <div class="stat-col <?= $fEstado===$ek?'activo':''; ?>"
-         style="border-color:<?= $fEstado===$ek?$ev['color']:'#e2e8f0' ?>"
-         onclick="window.location='?estado=<?= $ek ?><?= $fFuente?"&fuente=$fFuente":'' ?>'">
-      <i class="bi <?= $ev['icon'] ?>" style="font-size:1.3rem;color:<?= $ev['color'] ?>"></i>
-      <div class="fs-3 fw-bold mt-1" style="color:<?= $ev['color'] ?>"><?= $stats[$ek] ?></div>
-      <div class="text-muted" style="font-size:.72rem"><?= $ev['label'] ?></div>
-    </div>
-  </div>
-  <?php endforeach; ?>
-</div>
-
-<!-- Filtros por fuente -->
-<div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
-  <span class="text-muted small fw-semibold">Fuente:</span>
-  <a href="?<?= $fEstado?"estado=$fEstado&":'' ?>" 
-     class="btn btn-sm <?= !$fFuente?'btn-dark':'btn-outline-secondary' ?>">
-    Todas
+  <a href="?estado=<?= $ek ?><?= $fFuente ? "&fuente=$fFuente" : '' ?>"
+     class="stat-chip-sm <?= $fEstado===$ek?'activo':'' ?>"
+     style="background:<?= $ev['bg'] ?>;color:<?= $ev['color'] ?>;border-color:<?= $ev['color'] ?>40">
+    <i class="bi <?= $ev['icon'] ?>" style="font-size:.65rem"></i>
+    <?= $ev['label'] ?>
+    <strong><?= $stats[$ek] ?></strong>
   </a>
-  <?php foreach ($FUENTES as $fk => $fv): ?>
+  <?php endforeach; ?>
+  <span style="border-left:1px solid #e2e8f0;height:18px;margin:0 .1rem"></span>
+  <?php foreach ($FUENTES as $fk => $fv): if (!isset($statsF[$fk])) continue; ?>
   <a href="?fuente=<?= $fk ?><?= $fEstado?"&estado=$fEstado":'' ?>"
-     class="btn btn-sm <?= $fFuente===$fk?'btn-primary':'btn-outline-secondary' ?>"
-     style="<?= $fFuente===$fk?'background:'.$fv['color'].';border-color:'.$fv['color'].';color:#fff':'' ?>">
-    <i class="bi <?= $fv['icon'] ?> me-1"></i><?= $fv['label'] ?>
-    <?php if (isset($statsF[$fk])): ?>
-      <span class="badge bg-danger ms-1" style="font-size:.6rem"><?= $statsF[$fk] ?></span>
-    <?php endif; ?>
+     class="stat-chip-sm <?= $fFuente===$fk?'activo':'' ?>"
+     style="background:<?= $fv['bg'] ?>;color:<?= $fv['color'] ?>;border-color:<?= $fv['color'] ?>40">
+    <i class="bi <?= $fv['icon'] ?>" style="font-size:.65rem"></i><?= $fv['label'] ?>
+    <strong><?= $statsF[$fk] ?></strong>
   </a>
   <?php endforeach; ?>
   <?php if ($fEstado || $fFuente): ?>
-    <a href="?" class="btn btn-sm btn-outline-secondary ms-auto">&#x2715; Limpiar filtros</a>
+  <a href="?" class="stat-chip-sm ms-1" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0">
+    &#10005; Limpiar
+  </a>
   <?php endif; ?>
 </div>
 
-<!-- ── TABLERO KANBAN ── -->
+<!-- ══ TABLERO KANBAN (3 columnas) ══ -->
+<?php
+// Solo las 3 columnas del flujo activo; Rechazado queda fuera del kanban
+$KANBAN_COLS = ['pendiente', 'en_proceso', 'listo'];
+$KANBAN_ACCIONES = [
+    'pendiente'  => ['avanzar' => ['estado' => 'en_proceso', 'label' => '&#9654; Iniciar',  'cls' => 'btn-primary'],
+                     'retroceder' => null],
+    'en_proceso' => ['avanzar' => ['estado' => 'listo',      'label' => '&#10003; Listo',   'cls' => 'btn-success'],
+                     'retroceder' => ['estado' => 'pendiente', 'label' => '&#8629; Pendiente', 'cls' => 'btn-outline-secondary']],
+    'listo'      => ['avanzar' => null,
+                     'retroceder' => ['estado' => 'en_proceso','label' => '&#8629; En proceso','cls' => 'btn-outline-secondary']],
+];
+?>
 <div class="row g-3">
-  <?php foreach ($ESTADOS as $ek => $ev):
-    $cols = array_filter($solicitudes, fn($s) => $s['estado'] === $ek);
-    if ($fEstado && $fEstado !== $ek) continue;
-  ?>
-  <div class="col-md-6 col-xl-3">
-    <div class="tablero-col">
-      <div class="kanban-header" style="background:<?= $ev['bg'] ?>;color:<?= $ev['color'] ?>">
+<?php foreach ($KANBAN_COLS as $ek):
+  $ev   = $ESTADOS[$ek];
+  $cols = array_values(array_filter($solicitudes, fn($s) => $s['estado'] === $ek));
+  if ($fEstado && $fEstado !== $ek) continue;
+?>
+<div class="col-md-4">
+  <div class="tablero-col" id="kcol-<?= $ek ?>">
+
+    <!-- Header colapsable -->
+    <div class="col-header" style="background:<?= $ev['bg'] ?>;color:<?= $ev['color'] ?>"
+         onclick="toggleCol('<?= $ek ?>')">
+      <span class="fw-bold" style="font-size:.82rem">
         <i class="bi <?= $ev['icon'] ?> me-1"></i><?= $ev['label'] ?>
-        <span class="float-end badge" style="background:<?= $ev['color'] ?>;color:#fff;font-size:.68rem">
+        <span class="badge ms-1" style="background:<?= $ev['color'] ?>;color:#fff;font-size:.65rem">
           <?= count($cols) ?>
         </span>
-      </div>
-      <div class="p-2" style="min-height:120px">
-        <?php if (empty($cols)): ?>
-          <div class="text-center text-muted py-4" style="font-size:.78rem">Sin solicitudes</div>
-        <?php endif; ?>
-        <?php foreach ($cols as $s):
-          $fu   = $FUENTES[$s['fuente']] ?? $FUENTES['interno'];
-          $pr   = $PRIORIDADES[$s['prioridad']] ?? $PRIORIDADES[3];
-          $pct  = $s['num_items'] > 0 ? round($s['items_listos']/$s['num_items']*100) : 0;
-          $diasRest = '';
-          if ($s['fecha_limite']) {
-              $diff = (new DateTime($s['fecha_limite']))->diff(new DateTime('today'));
-              $diasRest = $diff->invert ? '<span class="text-danger">Vencido hace '.$diff->days.'d</span>' : ($diff->days==0 ? '<span class="text-danger">Hoy!</span>' : '<span class="text-muted">'.$diff->days.'d restantes</span>');
-          }
-        ?>
-        <div class="sol-card" style="border-left:3px solid <?= $fu['color'] ?>">
-          <div class="sol-card-header">
+      </span>
+      <i class="bi bi-chevron-down col-toggle-arrow"></i>
+    </div>
+
+    <!-- Cuerpo de columna -->
+    <div class="col-body" id="kbody-<?= $ek ?>">
+      <?php if (empty($cols)): ?>
+        <div class="text-center text-muted py-4" style="font-size:.77rem">
+          <i class="bi bi-inbox d-block mb-1" style="font-size:1.2rem"></i>Sin solicitudes
+        </div>
+      <?php endif; ?>
+
+      <?php foreach ($cols as $s):
+        $fu  = $FUENTES[$s['fuente']] ?? $FUENTES['interno'];
+        $pr  = $PRIORIDADES[$s['prioridad']] ?? $PRIORIDADES[3];
+        $pct = $s['num_items'] > 0 ? round($s['items_listos']/$s['num_items']*100) : 0;
+        $nombreColegio = $s['colegio_nombre'] ?: $s['conv_colegio'] ?: ($s['tienda_colegio'] ?? null);
+        $acc = $KANBAN_ACCIONES[$ek];
+
+        $diasRest = '';
+        if ($s['fecha_limite']) {
+            $diff = (new DateTime($s['fecha_limite']))->diff(new DateTime('today'));
+            $diasRest = $diff->invert
+                ? '<span class="text-danger fw-semibold">Vencido '.$diff->days.'d</span>'
+                : ($diff->days == 0 ? '<span class="text-danger fw-semibold">Hoy!</span>'
+                                    : '<span class="text-muted">'.$diff->days.'d restantes</span>');
+        }
+        $hist = $histMap[$s['id']] ?? [];
+      ?>
+      <div class="sol-card" style="border-left:3px solid <?= $pr['color'] ?>">
+
+        <!-- Vista compacta (siempre visible) -->
+        <div class="sol-compact">
+
+          <!-- Fila 1: prioridad + fuente + expand arrow -->
+          <div class="d-flex align-items-center justify-content-between mb-1">
             <div class="d-flex align-items-center gap-1 flex-wrap">
-              <span class="fuente-badge" style="background:<?= $fu['bg'] ?>;color:<?= $fu['color'] ?>">
-                <i class="bi <?= $fu['icon'] ?>" style="font-size:.65rem"></i><?= $fu['label'] ?>
+              <span class="prior-badge" style="background:<?= $pr['color'] ?>22;color:<?= $pr['color'] ?>">
+                <?= htmlspecialchars($pr['label']) ?>
               </span>
-              <span class="prior-dot" style="background:<?= $pr['color'] ?>" title="<?= $pr['label'] ?>"></span>
-            </div>
-            <div class="d-flex gap-1">
-              <?php if ($ek !== 'rechazado'): ?>
-              <button class="btn btn-link btn-sm p-0 text-primary" style="font-size:.7rem"
-                      onclick="abrirCambioEstado(<?= $s['id'] ?>, '<?= $ek ?>')"
-                      title="Cambiar estado">
-                <i class="bi bi-arrow-right-circle"></i>
-              </button>
+              <span class="fuente-badge" style="background:<?= $fu['bg'] ?>;color:<?= $fu['color'] ?>">
+                <i class="bi <?= $fu['icon'] ?>" style="font-size:.6rem"></i><?= $fu['label'] ?>
+              </span>
+              <?php if ($s['tienda_pedido']): ?>
+              <span style="font-size:.65rem;color:#64748b">
+                <i class="bi bi-hash" style="font-size:.6rem"></i><?= htmlspecialchars($s['tienda_pedido']) ?>
+              </span>
               <?php endif; ?>
+            </div>
+            <div class="d-flex align-items-center gap-1">
               <?php if (Auth::isAdmin()): ?>
               <a href="?del=<?= $s['id'] ?>&csrf=<?= Auth::csrfToken() ?>"
-                 class="btn btn-link btn-sm p-0 text-danger" style="font-size:.7rem"
-                 onclick="return confirm('Eliminar esta solicitud?')" title="Eliminar">
-                <i class="bi bi-trash"></i>
+                 class="text-danger" style="font-size:.75rem;line-height:1"
+                 onclick="return confirm('¿Eliminar esta solicitud?')" title="Eliminar">
+                <i class="bi bi-trash3"></i>
               </a>
               <?php endif; ?>
-            </div>
-          </div>
-          <div class="sol-card-body">
-            <div class="fw-semibold" style="font-size:.82rem;line-height:1.3">
-              <?= htmlspecialchars($s['titulo'] ?: ($s['kit_nombre'] ?: 'Sin titulo')) ?>
-            </div>
-            <?php if ($s['kit_nombre'] && $s['titulo']): ?>
-              <div class="text-muted" style="font-size:.72rem"><?= htmlspecialchars($s['kit_nombre']) ?></div>
-            <?php endif; ?>
-            <?php
-              // Determinar nombre del colegio según fuente
-              $nombreColegio = $s['colegio_nombre']
-                  ?: $s['conv_colegio']
-                  ?: ($s['tienda_colegio'] ?? null);
-            ?>
-            <?php if ($nombreColegio): ?>
-            <div class="fw-semibold mt-1" style="font-size:.75rem;color:#0891b2">
-              <i class="bi bi-building me-1"></i><?= htmlspecialchars(mb_strimwidth($nombreColegio,0,30,'...')) ?>
-            </div>
-            <?php endif; ?>
-            <div class="d-flex gap-2 mt-1 flex-wrap" style="font-size:.7rem;color:#64748b">
-              <span><i class="bi bi-boxes me-1"></i><?= $s['cantidad'] ?> uds</span>
-              <?php if ($s['tienda_pedido']): ?>
-                <span><i class="bi bi-shop me-1"></i><?= htmlspecialchars($s['tienda_pedido']) ?></span>
-              <?php endif; ?>
-              <?php if ($s['fuente']==='comercial' && $s['conv_colegio'] && $s['conv_colegio']!==$nombreColegio): ?>
-                <span><i class="bi bi-briefcase me-1"></i><?= htmlspecialchars(mb_strimwidth($s['conv_colegio'],0,20,'...')) ?></span>
-              <?php endif; ?>
-            </div>
-            <?php if ($diasRest): ?>
-              <div style="font-size:.7rem;margin-top:3px"><?= $diasRest ?></div>
-            <?php endif; ?>
-            <?php if ($s['num_items'] > 0): ?>
-            <div class="d-flex justify-content-between mt-1" style="font-size:.68rem;color:#64748b">
-              <span><?= $s['items_listos'] ?>/<?= $s['num_items'] ?> items</span>
-              <span><?= $pct ?>%</span>
-            </div>
-            <div class="prog-bar"><div class="prog-fill" style="width:<?= $pct ?>%"></div></div>
-            <?php endif; ?>
-            <?php if ($s['solicitado_nombre']): ?>
-              <div style="font-size:.68rem;color:#94a3b8;margin-top:4px">
-                <i class="bi bi-person me-1"></i><?= htmlspecialchars($s['solicitado_nombre']) ?>
-                &middot; <?= date('d/m',strtotime($s['created_at'])) ?>
-              </div>
-            <?php endif; ?>
-          </div>
-        </div>
-        <?php endforeach; ?>
-      </div>
-    </div>
-  </div>
-  <?php endforeach; ?>
-</div>
-
-<!-- ── MODAL CAMBIAR ESTADO ── -->
-<div class="modal fade" id="modalEstado" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="border-radius:14px">
-      <div class="modal-header border-0">
-        <h5 class="modal-title fw-bold"><i class="bi bi-arrow-right-circle me-2"></i>Actualizar Estado</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="POST">
-        <div class="modal-body pt-0">
-          <input type="hidden" name="action"       value="cambiar_estado">
-          <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
-          <input type="hidden" name="solicitud_id" id="estadoSolId">
-          <div class="mb-3">
-            <label class="form-label small fw-semibold">Nuevo estado</label>
-            <div class="d-flex gap-2 flex-wrap">
-              <?php foreach ($ESTADOS as $ek => $ev): ?>
-              <button type="button" class="btn btn-sm btn-estado flex-fill"
-                      style="background:<?= $ev['bg'] ?>;color:<?= $ev['color'] ?>;border:1.5px solid <?= $ev['color'] ?>"
-                      data-estado="<?= $ek ?>"
-                      onclick="selEstado('<?= $ek ?>', this)">
-                <i class="bi <?= $ev['icon'] ?> me-1"></i><?= $ev['label'] ?>
+              <button type="button" class="btn p-0 border-0" style="color:#94a3b8;font-size:.8rem;line-height:1"
+                      onclick="toggleCard(<?= $s['id'] ?>)" title="Ver detalle" id="arrow-<?= $s['id'] ?>">
+                <i class="bi bi-chevron-down"></i>
               </button>
-              <?php endforeach; ?>
-              <input type="hidden" name="estado" id="estadoHidden" required>
             </div>
           </div>
-          <div>
-            <label class="form-label small fw-semibold">Notas / Comentario</label>
-            <textarea name="notas_respuesta" class="form-control form-control-sm" rows="3"
-                      placeholder="Observaciones del equipo de produccion..."></textarea>
+
+          <!-- Fila 2: título + kit -->
+          <div class="fw-semibold" style="font-size:.81rem;line-height:1.3;margin-bottom:.2rem">
+            <?= htmlspecialchars($s['titulo'] ?: ($s['kit_nombre'] ?: 'Sin título')) ?>
+          </div>
+          <?php if ($s['kit_nombre'] && $s['titulo']): ?>
+          <div class="text-muted" style="font-size:.72rem;margin-bottom:.2rem">
+            <i class="bi bi-bag me-1"></i><?= htmlspecialchars($s['kit_nombre']) ?>
+          </div>
+          <?php endif; ?>
+
+          <!-- Fila 3: cantidad + colegio -->
+          <div class="d-flex gap-2 align-items-center flex-wrap" style="font-size:.71rem;color:#64748b;margin-bottom:.35rem">
+            <span><i class="bi bi-boxes me-1"></i><strong><?= $s['cantidad'] ?></strong> uds</span>
+            <?php if ($nombreColegio): ?>
+            <span style="color:#0891b2"><i class="bi bi-building me-1"></i><?= htmlspecialchars(mb_strimwidth($nombreColegio,0,28,'…')) ?></span>
+            <?php endif; ?>
+            <?php if ($diasRest): ?><span><?= $diasRest ?></span><?php endif; ?>
+          </div>
+
+          <?php if ($s['num_items'] > 0): ?>
+          <div class="prog-bar mb-2"><div class="prog-fill" style="width:<?= $pct ?>%"></div></div>
+          <?php endif; ?>
+
+          <!-- Botones de acción inline -->
+          <div class="d-flex gap-1 flex-wrap">
+            <?php if ($acc['avanzar']): ?>
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="action"       value="cambiar_estado">
+              <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
+              <input type="hidden" name="solicitud_id" value="<?= $s['id'] ?>">
+              <input type="hidden" name="estado"       value="<?= $acc['avanzar']['estado'] ?>">
+              <button type="submit" class="btn btn-inline <?= $acc['avanzar']['cls'] ?>">
+                <?= $acc['avanzar']['label'] ?>
+              </button>
+            </form>
+            <?php endif; ?>
+
+            <?php if ($acc['retroceder']): ?>
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="action"       value="cambiar_estado">
+              <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
+              <input type="hidden" name="solicitud_id" value="<?= $s['id'] ?>">
+              <input type="hidden" name="estado"       value="<?= $acc['retroceder']['estado'] ?>">
+              <button type="submit" class="btn btn-inline <?= $acc['retroceder']['cls'] ?>" style="font-size:.63rem">
+                <?= $acc['retroceder']['label'] ?>
+              </button>
+            </form>
+            <?php endif; ?>
+
+            <?php if ($ek === 'listo' && $s['pedido_id']): ?>
+            <a href="<?= APP_URL ?>/modules/alistamiento/?pid=<?= $s['pedido_id'] ?>"
+               class="btn btn-inline btn-outline-primary" style="font-size:.63rem">
+              <i class="bi bi-box-seam me-1"></i>Alistamiento
+            </a>
+            <?php endif; ?>
           </div>
         </div>
-        <div class="modal-footer border-0 pt-0">
-          <button type="submit" class="btn btn-primary fw-bold" id="btnActualizarEstado" disabled>
-            <i class="bi bi-check me-1"></i>Actualizar
-          </button>
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
 
-<!-- ── MODAL NUEVA SOLICITUD ── -->
+        <!-- Vista expandida (toggle) -->
+        <div class="sol-detail" id="detail-<?= $s['id'] ?>">
+          <div class="row g-2" style="font-size:.75rem">
+
+            <?php if ($fu): ?>
+            <div class="col-6">
+              <span class="text-muted">Fuente:</span>
+              <span class="fuente-badge ms-1" style="background:<?= $fu['bg'] ?>;color:<?= $fu['color'] ?>">
+                <i class="bi <?= $fu['icon'] ?>" style="font-size:.6rem"></i><?= $fu['label'] ?>
+              </span>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($s['fecha_limite']): ?>
+            <div class="col-6">
+              <span class="text-muted">F. l&iacute;mite:</span>
+              <strong><?= date('d/m/Y', strtotime($s['fecha_limite'])) ?></strong>
+              <?php if ($diasRest): ?><?= $diasRest ?><?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($s['notas']): ?>
+            <div class="col-12">
+              <span class="text-muted">Notas:</span>
+              <?= htmlspecialchars($s['notas']) ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($s['descripcion'] ?? null): ?>
+            <div class="col-12">
+              <span class="text-muted">Descripci&oacute;n:</span>
+              <?= htmlspecialchars($s['descripcion']) ?>
+            </div>
+            <?php endif; ?>
+
+            <div class="col-12">
+              <span class="text-muted">Creado:</span>
+              <?= htmlspecialchars($s['solicitado_nombre'] ?? '—') ?>
+              &middot; <?= date('d/m/Y H:i', strtotime($s['created_at'])) ?>
+            </div>
+
+            <?php if (!empty($hist)): ?>
+            <div class="col-12 mt-1">
+              <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">
+                Historial
+              </div>
+              <?php foreach ($hist as $hr):
+                $hEv = $ESTADOS[$hr['estado']] ?? ['label'=>$hr['estado'],'color'=>'#64748b'];
+              ?>
+              <div class="hist-row d-flex gap-2 align-items-start">
+                <span style="color:<?= $hEv['color'] ?>;font-weight:600;white-space:nowrap">
+                  <?= htmlspecialchars($hEv['label']) ?>
+                </span>
+                <?php if ($hr['comentario']): ?>
+                <span class="text-muted">— <?= htmlspecialchars(mb_strimwidth($hr['comentario'],0,60,'…')) ?></span>
+                <?php endif; ?>
+                <span class="ms-auto text-muted" style="white-space:nowrap">
+                  <?= date('d/m H:i', strtotime($hr['created_at'])) ?>
+                </span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+      </div><!-- /.sol-card -->
+      <?php endforeach; ?>
+    </div><!-- /.col-body -->
+  </div><!-- /.tablero-col -->
+</div>
+<?php endforeach; ?>
+</div><!-- /.row -->
+
+<!-- ── MODAL NUEVA SOLICITUD (intacto) ── -->
 <div class="modal fade" id="modalNueva" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content" style="border-radius:14px">
@@ -431,15 +538,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
         <div class="modal-body" style="overflow-y:auto;max-height:65vh">
           <div class="row g-3">
 
-            <!-- Fuente -->
             <div class="col-12">
               <label class="form-label small fw-semibold">Origen / Fuente *</label>
               <div class="d-flex gap-2 flex-wrap">
                 <?php foreach ($FUENTES as $fk => $fv): ?>
                 <button type="button" class="btn btn-sm btn-fuente"
                         style="background:<?= $fv['bg'] ?>;color:<?= $fv['color'] ?>;border:1.5px solid <?= $fv['color'] ?>40"
-                        data-fuente="<?= $fk ?>"
-                        onclick="selFuente('<?= $fk ?>', this)">
+                        data-fuente="<?= $fk ?>" onclick="selFuente('<?= $fk ?>', this)">
                   <i class="bi <?= $fv['icon'] ?> me-1"></i><?= $fv['label'] ?>
                 </button>
                 <?php endforeach; ?>
@@ -471,8 +576,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Fecha l&iacute;mite</label>
-              <input type="date" name="fecha_limite" class="form-control"
-                     min="<?= date('Y-m-d') ?>">
+              <input type="date" name="fecha_limite" class="form-control" min="<?= date('Y-m-d') ?>">
             </div>
 
             <div class="col-md-8">
@@ -490,7 +594,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
               <input type="number" name="cantidad" class="form-control" min="1" value="1" required>
             </div>
 
-            <!-- Vínculos según fuente -->
             <div class="col-md-6" id="divPedido">
               <label class="form-label small fw-semibold">Pedido Tienda (opcional)</label>
               <select name="pedido_id" class="form-select form-select-sm">
@@ -553,30 +656,50 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </div>
 
 <script>
-function abrirCambioEstado(id, estadoActual) {
-    document.getElementById('estadoSolId').value = id;
-    document.getElementById('estadoHidden').value = '';
-    document.querySelectorAll('.btn-estado').forEach(b => b.style.fontWeight = '400');
-    document.getElementById('btnActualizarEstado').disabled = true;
-    var m = new bootstrap.Modal(document.getElementById('modalEstado'));
-    m.show();
+// ── Colapsar / expandir columna ───────────────────────────────
+function toggleCol(col) {
+    var el = document.getElementById('kcol-' + col);
+    if (!el) return;
+    var collapsed = el.classList.toggle('collapsed');
+    try { localStorage.setItem('kanban_col_' + col, collapsed ? '1' : '0'); } catch(e) {}
 }
-function selEstado(estado, btn) {
-    document.querySelectorAll('.btn-estado').forEach(b => b.style.fontWeight = '400');
-    btn.style.fontWeight = '700';
-    document.getElementById('estadoHidden').value = estado;
-    document.getElementById('btnActualizarEstado').disabled = false;
+
+// ── Expandir / colapsar tarjeta ───────────────────────────────
+function toggleCard(id) {
+    var detail = document.getElementById('detail-' + id);
+    var arrow  = document.getElementById('arrow-' + id);
+    if (!detail) return;
+    var open = detail.classList.toggle('open');
+    if (arrow) {
+        var icon = arrow.querySelector('i');
+        if (icon) {
+            icon.className = open ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+        }
+    }
 }
-function selFuente(fuente, btn) {
-    document.querySelectorAll('.btn-fuente').forEach(b => b.style.borderWidth = '1.5px');
-    btn.style.borderWidth = '3px';
-    document.getElementById('fuenteHidden').value = fuente;
-}
-// Pre-seleccionar interno
+
+// ── Restaurar estado de columnas desde localStorage ──────────
 document.addEventListener('DOMContentLoaded', function() {
+    ['pendiente','en_proceso','listo'].forEach(function(col) {
+        try {
+            if (localStorage.getItem('kanban_col_' + col) === '1') {
+                var el = document.getElementById('kcol-' + col);
+                if (el) el.classList.add('collapsed');
+            }
+        } catch(e) {}
+    });
+
+    // Modal Nueva Solicitud: pre-seleccionar "interno"
     var btnInterno = document.querySelector('[data-fuente="interno"]');
     if (btnInterno) selFuente('interno', btnInterno);
 });
+
+// ── Selector de fuente en modal ───────────────────────────────
+function selFuente(fuente, btn) {
+    document.querySelectorAll('.btn-fuente').forEach(function(b) { b.style.borderWidth = '1.5px'; });
+    btn.style.borderWidth = '3px';
+    document.getElementById('fuenteHidden').value = fuente;
+}
 </script>
 
 <?php require_once dirname(__DIR__, 2) . '/includes/footer.php'; ?>
