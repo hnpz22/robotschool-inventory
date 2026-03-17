@@ -60,3 +60,15 @@ if (!empty($_msClientId)) {
     define('MS_CLIENT_SECRET', getenv('MS_CLIENT_SECRET') ?: '');
     define('MS_TENANT_ID',     getenv('MS_TENANT_ID')     ?: 'common');
 }
+
+// ── MinIO (almacenamiento S3-compatible) ──
+define('MINIO_ENDPOINT',          rtrim(getenv('MINIO_ENDPOINT')   ?: 'http://minio:9000', '/'));
+define('MINIO_PUBLIC_URL',        rtrim(getenv('MINIO_PUBLIC_URL') ?: '', '/'));
+define('MINIO_ROOT_USER',         getenv('MINIO_ROOT_USER')        ?: '');
+define('MINIO_ROOT_PASSWORD',     getenv('MINIO_ROOT_PASSWORD')    ?: '');
+define('MINIO_BUCKET_ELEMENTOS',  getenv('MINIO_BUCKET_ELEMENTOS') ?: 'elementos');
+define('MINIO_BUCKET_COLEGIOS',   getenv('MINIO_BUCKET_COLEGIOS')  ?: 'colegios');
+define('MINIO_BUCKET_CURSOS',     getenv('MINIO_BUCKET_CURSOS')    ?: 'cursos');
+define('MINIO_BUCKET_KITS',       getenv('MINIO_BUCKET_KITS')      ?: 'kits');
+define('MINIO_BUCKET_DESPACHOS',  getenv('MINIO_BUCKET_DESPACHOS') ?: 'despachos');
+define('MINIO_BUCKET_DOCUMENTOS', getenv('MINIO_BUCKET_DOCUMENTOS') ?: 'documentos');
