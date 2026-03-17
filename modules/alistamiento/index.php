@@ -129,7 +129,7 @@ if ($busqueda !== '' || $pidGet > 0) {
             FROM tienda_pedidos_historial h
             LEFT JOIN usuarios u ON u.id = h.usuario_id
             WHERE h.pedido_id = ?
-            ORDER BY h.creado_at DESC
+            ORDER BY h.created_at DESC
             LIMIT 10");
         $historial->execute([$pedido['id']]);
         $historial = $historial->fetchAll(PDO::FETCH_ASSOC);
@@ -159,10 +159,16 @@ $ESTADO_INFO = [
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 
+<style>
+.tr-cola{cursor:pointer}
+.tr-cola:hover td{background:#f8fafc}
+</style>
+
+<!-- ── Header ────────────────────────────────────────────────── -->
 <div class="d-flex align-items-center gap-2 mb-4">
   <div>
-    <h4 class="fw-bold mb-0"><i class="bi bi-box-seam me-2 text-purple" style="color:#7c3aed"></i>Alistamiento</h4>
-    <div class="text-muted small">Busca un pedido, confirma la etiqueta y registra el despacho.</div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-box-seam me-2" style="color:#7c3aed"></i>Alistamiento</h4>
+    <div class="text-muted small">Confirma etiquetas y registra despachos.</div>
   </div>
   <a href="<?= APP_URL ?>/modules/pedidos_tienda/" class="btn btn-sm btn-light ms-auto">
     <i class="bi bi-arrow-left me-1"></i>Pedidos tienda
@@ -172,21 +178,74 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <?php if (!empty($errorAccion)): ?>
   <div class="alert alert-danger py-2"><i class="bi bi-x-circle me-2"></i><?= htmlspecialchars($errorAccion) ?></div>
 <?php endif; ?>
-
 <?php if ($okMsg === 'etiqueta'): ?>
   <div class="alert alert-success py-2"><i class="bi bi-check-circle me-2"></i>Etiqueta confirmada. Pedido en alistamiento.</div>
 <?php elseif ($okMsg === 'despachado'): ?>
   <div class="alert alert-success py-2"><i class="bi bi-truck me-2"></i>Pedido marcado como despachado.</div>
 <?php endif; ?>
 
-<!-- ── Buscador ──────────────────────────────────────────────── -->
+<!-- ── Cola de alistamiento — PRIMERO ───────────────────────── -->
+<?php if (!empty($enAlistamiento)): ?>
 <div class="section-card mb-4">
-  <h6 class="fw-bold mb-3"><i class="bi bi-search me-2 text-primary"></i>Buscar pedido</h6>
+  <h6 class="fw-bold mb-3">
+    <i class="bi bi-list-task me-2" style="color:#7c3aed"></i>
+    Cola de alistamiento
+    <span class="text-muted fw-normal small">(<?= count($enAlistamiento) ?> pedidos)</span>
+  </h6>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0" style="font-size:.82rem">
+      <thead class="table-light">
+        <tr>
+          <th>#Orden</th>
+          <th>Kit</th>
+          <th style="text-align:center">Cant.</th>
+          <th>Ciudad / Colegio</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($enAlistamiento as $p):
+          $cant        = (int)($p['cantidad'] ?? 1);
+          $borderColor = $p['estado'] === 'en_alistamiento' ? '#7c3aed' : '#16a34a';
+        ?>
+        <tr class="tr-cola" onclick="window.location.href='?pid=<?= $p['id'] ?>'">
+          <td style="border-left:3px solid <?= $borderColor ?>;white-space:nowrap">
+            <span class="fw-semibold">#<?= htmlspecialchars($p['woo_order_id']) ?></span>
+            <?php if (!empty($p['instrucciones_especiales'])): ?>
+            <i class="bi bi-info-circle text-warning ms-1"
+               title="<?= htmlspecialchars($p['instrucciones_especiales']) ?>"
+               data-bs-toggle="tooltip"></i>
+            <?php endif; ?>
+          </td>
+          <td><?= htmlspecialchars($p['kit_nombre'] ?: '—') ?></td>
+          <td class="text-center"><?= $cant ?></td>
+          <td class="text-muted">
+            <?= htmlspecialchars(implode(' / ', array_filter([$p['ciudad'], $p['colegio_nombre']]))) ?>
+          </td>
+          <td onclick="event.stopPropagation()">
+            <a href="?pid=<?= $p['id'] ?>" class="btn btn-sm btn-outline-secondary">Ver</a>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php elseif ($busqueda === '' && !$pidGet): ?>
+<div class="section-card text-center text-muted py-5 mb-4">
+  <i class="bi bi-box-seam fs-2 mb-2 d-block"></i>
+  No hay pedidos listos para alistamiento en este momento.
+</div>
+<?php endif; ?>
+
+<!-- ── Buscador — SEGUNDO ────────────────────────────────────── -->
+<div class="section-card mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-search me-2 text-primary"></i>Buscar pedido por número de orden</h6>
   <form method="GET" class="row g-2 align-items-end">
     <div class="col-md-8">
       <input type="text" name="q" class="form-control"
-             placeholder="# Orden WooCommerce o ID interno (ej: 8110)"
-             value="<?= htmlspecialchars($busqueda) ?>" autofocus>
+             placeholder="# Orden WooCommerce (ej: 8110)"
+             value="<?= htmlspecialchars($busqueda) ?>">
     </div>
     <div class="col-md-4">
       <button type="submit" class="btn btn-primary w-100">
@@ -196,38 +255,45 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   </form>
 </div>
 
-<!-- ── Resultado de búsqueda ────────────────────────────────── -->
+<!-- ── Resultado de búsqueda — TERCERO ──────────────────────── -->
 <?php if ($busqueda !== '' || $pidGet > 0): ?>
   <?php if (!$pedido): ?>
     <div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>No se encontró ningún pedido con ese criterio.</div>
   <?php else:
-    $estadoInfo = $ESTADO_INFO[$pedido['estado']] ?? ['label' => $pedido['estado'], 'color' => '#64748b'];
-    $cantidad   = (int)($pedido['cantidad'] ?? 1);
+    $estadoInfo     = $ESTADO_INFO[$pedido['estado']] ?? ['label' => $pedido['estado'], 'color' => '#64748b'];
+    $cantidad       = (int)($pedido['cantidad'] ?? 1);
     $puedeEtiquetar = in_array($pedido['estado'], ['listo_produccion', 'aprobado', 'en_produccion']);
     $puedeDespac    = $pedido['estado'] === 'en_alistamiento';
   ?>
   <div class="section-card mb-4">
+
+    <!-- Cabecera del pedido -->
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
       <div>
         <h5 class="fw-bold mb-0">
           Pedido <code>#<?= htmlspecialchars($pedido['woo_order_id']) ?></code>
-          <span class="badge ms-2" style="background:<?= $estadoInfo['color'] ?>;font-size:.7rem">
+          <span class="badge ms-2" style="background:<?= $estadoInfo['color'] ?>;color:#fff;font-size:.7rem">
             <?= $estadoInfo['label'] ?>
           </span>
         </h5>
-        <div class="text-muted small">ID interno: <?= $pedido['id'] ?> &middot; Compra: <?= htmlspecialchars($pedido['fecha_compra']) ?></div>
+        <div class="text-muted small">Compra: <?= htmlspecialchars($pedido['fecha_compra']) ?></div>
       </div>
 
       <!-- Acciones -->
       <div class="d-flex gap-2 flex-wrap">
+        <!-- Imprimir etiqueta directamente -->
+        <a href="<?= APP_URL ?>/modules/pedidos_tienda/stickers.php?ids=<?= $pedido['id'] ?>"
+           target="_blank" class="btn btn-sm btn-outline-danger">
+          <i class="bi bi-printer me-1"></i>Etiqueta
+        </a>
+
         <?php if ($puedeEtiquetar): ?>
-        <form method="POST">
+        <form method="POST" style="display:inline">
           <input type="hidden" name="action"    value="confirmar_etiqueta">
           <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
           <input type="hidden" name="pedido_id" value="<?= $pedido['id'] ?>">
-          <button type="submit" class="btn btn-sm btn-purple"
-                  style="background:#7c3aed;color:#fff;border-color:#7c3aed"
-                  onclick="return confirm('¿Confirmar etiqueta y pasar a alistamiento?')">
+          <button type="submit" class="btn btn-sm"
+                  style="background:#7c3aed;color:#fff;border-color:#7c3aed">
             <i class="bi bi-tag-fill me-1"></i>Confirmar etiqueta
           </button>
         </form>
@@ -241,8 +307,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       </div>
     </div>
 
+    <!-- Datos operativos -->
     <div class="row g-3">
-      <!-- Datos del cliente -->
       <div class="col-md-6">
         <div class="p-3 rounded" style="background:#f8fafc;border:1px solid #e2e8f0">
           <div class="fw-semibold small text-muted mb-2 text-uppercase" style="letter-spacing:.05em">Cliente</div>
@@ -267,7 +333,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
         </div>
       </div>
 
-      <!-- Kit y despacho -->
       <div class="col-md-6">
         <div class="p-3 rounded" style="background:#f8fafc;border:1px solid #e2e8f0">
           <div class="fw-semibold small text-muted mb-2 text-uppercase" style="letter-spacing:.05em">Kit y destino</div>
@@ -278,7 +343,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <span class="ms-1 text-muted"><i class="bi bi-building me-1"></i><?= htmlspecialchars($pedido['colegio_nombre']) ?></span>
             <?php endif; ?>
           </div>
-
           <?php if ($pedido['guia_envio'] || $pedido['transportadora']): ?>
           <div class="mt-2 p-2 rounded" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:.82rem">
             <i class="bi bi-truck me-1 text-success"></i>
@@ -290,14 +354,14 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       </div>
     </div>
 
-    <!-- Historial -->
+    <!-- Historial reciente -->
     <?php if (!empty($historial)): ?>
     <div class="mt-3">
       <div class="fw-semibold small text-muted mb-2">Historial reciente</div>
       <div style="max-height:180px;overflow-y:auto">
         <?php foreach ($historial as $h): ?>
         <div class="d-flex gap-2 align-items-start mb-1" style="font-size:.79rem">
-          <span class="text-muted" style="white-space:nowrap"><?= substr($h['creado_at'], 0, 16) ?></span>
+          <span class="text-muted" style="white-space:nowrap"><?= substr($h['created_at'], 0, 16) ?></span>
           <span class="text-muted">→</span>
           <span class="fw-semibold"><?= htmlspecialchars($ESTADO_INFO[$h['estado_nuevo'] ?? '']['label'] ?? ($h['estado_nuevo'] ?? '')) ?></span>
           <?php if ($h['nota']): ?>
@@ -327,7 +391,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <input type="hidden" name="action"    value="despachar">
             <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
             <input type="hidden" name="pedido_id" value="<?= $pedido['id'] ?>">
-
             <div class="mb-3">
               <label class="form-label fw-semibold">Transportadora</label>
               <input type="text" name="transportadora" class="form-control"
@@ -344,7 +407,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-sm btn-primary">
+            <button type="submit" class="btn btn-primary">
               <i class="bi bi-truck me-1"></i>Confirmar despacho
             </button>
           </div>
@@ -357,76 +420,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <?php endif; // pedido encontrado ?>
 <?php endif; // búsqueda activa ?>
 
-<!-- ── Cola de alistamiento ─────────────────────────────────── -->
-<?php if (!empty($enAlistamiento)): ?>
-<div class="section-card">
-  <h6 class="fw-bold mb-3">
-    <i class="bi bi-list-task me-2 text-purple" style="color:#7c3aed"></i>
-    Cola de alistamiento
-    <span class="text-muted fw-normal small">(<?= count($enAlistamiento) ?> pedidos)</span>
-  </h6>
-  <div class="table-responsive">
-    <table class="table table-sm table-hover" style="font-size:.82rem">
-      <thead class="table-light">
-        <tr>
-          <th># Orden</th>
-          <th>Cliente</th>
-          <th>Kit</th>
-          <th>Cant.</th>
-          <th>Ciudad / Colegio</th>
-          <th>Instrucciones</th>
-          <th>Estado</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($enAlistamiento as $p):
-          $ei = $ESTADO_INFO[$p['estado']] ?? ['label' => $p['estado'], 'color' => '#64748b'];
-          $cant = (int)($p['cantidad'] ?? 1);
-        ?>
-        <tr>
-          <td><code>#<?= htmlspecialchars($p['woo_order_id']) ?></code></td>
-          <td><?= htmlspecialchars($p['cliente_nombre']) ?></td>
-          <td><?= htmlspecialchars($p['kit_nombre'] ?: '—') ?></td>
-          <td class="text-center"><?= $cant ?></td>
-          <td class="text-muted">
-            <?= htmlspecialchars(implode(' / ', array_filter([$p['ciudad'], $p['colegio_nombre']]))) ?>
-          </td>
-          <td class="text-muted">
-            <?php if (!empty($p['instrucciones_especiales'])): ?>
-              <span title="<?= htmlspecialchars($p['instrucciones_especiales']) ?>"
-                    data-bs-toggle="tooltip">
-                <i class="bi bi-info-circle text-warning"></i>
-                <?= htmlspecialchars(mb_substr($p['instrucciones_especiales'], 0, 40)) ?><?= mb_strlen($p['instrucciones_especiales']) > 40 ? '…' : '' ?>
-              </span>
-            <?php endif; ?>
-          </td>
-          <td>
-            <span class="badge" style="background:<?= $ei['color'] ?>;font-size:.65rem">
-              <?= $ei['label'] ?>
-            </span>
-          </td>
-          <td>
-            <a href="?pid=<?= $p['id'] ?>" class="btn btn-xs btn-sm btn-outline-secondary py-0 px-2" style="font-size:.72rem">
-              Ver
-            </a>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-</div>
-<?php elseif ($busqueda === '' && !$pidGet): ?>
-<div class="section-card text-center text-muted py-5">
-  <i class="bi bi-box-seam fs-2 mb-2 d-block"></i>
-  No hay pedidos listos para alistamiento en este momento.
-</div>
-<?php endif; ?>
-
 <script>
-// Bootstrap tooltips
-document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
   new bootstrap.Tooltip(el);
 });
 </script>

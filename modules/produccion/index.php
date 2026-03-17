@@ -186,7 +186,7 @@ $convs     = $db->query("SHOW TABLES LIKE 'convenios'")->fetchColumn() ?
 $pedidos   = $db->query("SELECT id,woo_order_id AS numero_pedido FROM tienda_pedidos WHERE estado NOT IN ('entregado','cancelado') ORDER BY created_at DESC LIMIT 50")->fetchAll();
 $usuarios  = $db->query("SELECT id,nombre FROM usuarios WHERE activo=1 ORDER BY nombre")->fetchAll();
 
-// ── Historial batch: últimos 3 movimientos por solicitud ──────────
+// ── Historial batch: último movimiento por solicitud ─────────────
 $histMap = [];
 $solIds  = array_column($solicitudes, 'id');
 if (!empty($solIds)) {
@@ -200,8 +200,7 @@ if (!empty($solIds)) {
     ")->fetchAll(PDO::FETCH_ASSOC);
     foreach ($histRows as $hr) {
         $sid = $hr['solicitud_id'];
-        if (!isset($histMap[$sid])) $histMap[$sid] = [];
-        if (count($histMap[$sid]) < 3) $histMap[$sid][] = $hr;
+        if (!isset($histMap[$sid])) $histMap[$sid] = [$hr]; // solo el último
     }
 }
 
@@ -239,8 +238,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 .hist-row{font-size:.71rem;color:#64748b;padding:.15rem 0;border-bottom:1px solid #f8fafc}
 .hist-row:last-child{border-bottom:none}
 
-/* ── Inline action buttons ── */
-.btn-inline{font-size:.68rem;padding:.2rem .5rem;border-radius:6px;white-space:nowrap;font-weight:600}
 
 /* ── Stat chips arriba ── */
 .stat-chip-sm{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:10px;
@@ -372,8 +369,8 @@ $KANBAN_ACCIONES = [
                 <i class="bi <?= $fu['icon'] ?>" style="font-size:.6rem"></i><?= $fu['label'] ?>
               </span>
               <?php if ($s['tienda_pedido']): ?>
-              <span style="font-size:.65rem;color:#64748b">
-                <i class="bi bi-hash" style="font-size:.6rem"></i><?= htmlspecialchars($s['tienda_pedido']) ?>
+              <span class="fw-bold" style="font-size:.75rem;color:#1e293b">
+                #<?= htmlspecialchars($s['tienda_pedido']) ?>
               </span>
               <?php endif; ?>
             </div>
@@ -392,15 +389,22 @@ $KANBAN_ACCIONES = [
             </div>
           </div>
 
-          <!-- Fila 2: título + kit -->
+          <!-- Fila 2: nombre del kit -->
+          <?php
+          // Mostrar kit_nombre como título principal.
+          // Si no hay kit_nombre, limpiar el título eliminando prefijo "Pedido Tienda: " y el sufijo " — Cliente".
+          if ($s['kit_nombre']) {
+              $displayKit = $s['kit_nombre'];
+          } else {
+              $t = $s['titulo'] ?? 'Sin título';
+              $t = preg_replace('/^Pedido\s+Tienda:\s*/i', '', $t);
+              $t = preg_replace('/\s*—\s*.+$/', '', $t);
+              $displayKit = trim($t) ?: 'Sin título';
+          }
+          ?>
           <div class="fw-semibold" style="font-size:.81rem;line-height:1.3;margin-bottom:.2rem">
-            <?= htmlspecialchars($s['titulo'] ?: ($s['kit_nombre'] ?: 'Sin título')) ?>
+            <?= htmlspecialchars($displayKit) ?>
           </div>
-          <?php if ($s['kit_nombre'] && $s['titulo']): ?>
-          <div class="text-muted" style="font-size:.72rem;margin-bottom:.2rem">
-            <i class="bi bi-bag me-1"></i><?= htmlspecialchars($s['kit_nombre']) ?>
-          </div>
-          <?php endif; ?>
 
           <!-- Fila 3: cantidad + colegio -->
           <div class="d-flex gap-2 align-items-center flex-wrap" style="font-size:.71rem;color:#64748b;margin-bottom:.35rem">
@@ -423,7 +427,7 @@ $KANBAN_ACCIONES = [
               <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
               <input type="hidden" name="solicitud_id" value="<?= $s['id'] ?>">
               <input type="hidden" name="estado"       value="<?= $acc['avanzar']['estado'] ?>">
-              <button type="submit" class="btn btn-inline <?= $acc['avanzar']['cls'] ?>">
+              <button type="submit" class="btn btn-sm <?= $acc['avanzar']['cls'] ?>">
                 <?= $acc['avanzar']['label'] ?>
               </button>
             </form>
@@ -435,7 +439,7 @@ $KANBAN_ACCIONES = [
               <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
               <input type="hidden" name="solicitud_id" value="<?= $s['id'] ?>">
               <input type="hidden" name="estado"       value="<?= $acc['retroceder']['estado'] ?>">
-              <button type="submit" class="btn btn-inline <?= $acc['retroceder']['cls'] ?>" style="font-size:.63rem">
+              <button type="submit" class="btn btn-sm <?= $acc['retroceder']['cls'] ?>">
                 <?= $acc['retroceder']['label'] ?>
               </button>
             </form>
@@ -443,7 +447,7 @@ $KANBAN_ACCIONES = [
 
             <?php if ($ek === 'listo' && $s['pedido_id']): ?>
             <a href="<?= APP_URL ?>/modules/alistamiento/?pid=<?= $s['pedido_id'] ?>"
-               class="btn btn-inline btn-outline-primary" style="font-size:.63rem">
+               class="btn btn-sm btn-outline-primary">
               <i class="bi bi-box-seam me-1"></i>Alistamiento
             </a>
             <?php endif; ?>
@@ -454,27 +458,43 @@ $KANBAN_ACCIONES = [
         <div class="sol-detail" id="detail-<?= $s['id'] ?>">
           <div class="row g-2" style="font-size:.75rem">
 
-            <?php if ($fu): ?>
-            <div class="col-6">
-              <span class="text-muted">Fuente:</span>
-              <span class="fuente-badge ms-1" style="background:<?= $fu['bg'] ?>;color:<?= $fu['color'] ?>">
-                <i class="bi <?= $fu['icon'] ?>" style="font-size:.6rem"></i><?= $fu['label'] ?>
-              </span>
-            </div>
-            <?php endif; ?>
-
             <?php if ($s['fecha_limite']): ?>
-            <div class="col-6">
-              <span class="text-muted">F. l&iacute;mite:</span>
-              <strong><?= date('d/m/Y', strtotime($s['fecha_limite'])) ?></strong>
-              <?php if ($diasRest): ?><?= $diasRest ?><?php endif; ?>
+            <?php
+              $limDiff  = (new DateTime($s['fecha_limite']))->diff(new DateTime('today'));
+              $limColor = $limDiff->invert
+                  ? '#dc2626'
+                  : ($limDiff->days == 0 ? '#dc2626' : ($limDiff->days <= 3 ? '#d97706' : '#16a34a'));
+            ?>
+            <div class="col-12">
+              <div class="d-flex align-items-center gap-2 p-2 rounded"
+                   style="background:<?= $limColor ?>18;border:1px solid <?= $limColor ?>40">
+                <i class="bi bi-calendar-event" style="color:<?= $limColor ?>"></i>
+                <span style="color:<?= $limColor ?>;font-weight:700;font-size:.82rem">
+                  <?= date('d/m/Y', strtotime($s['fecha_limite'])) ?>
+                </span>
+                <?php if ($diasRest): ?><span><?= $diasRest ?></span><?php endif; ?>
+              </div>
             </div>
             <?php endif; ?>
 
-            <?php if ($s['notas']): ?>
+            <?php
+            // Notas: omitir si contienen datos de cliente ("Cliente: …")
+            $notasLimpias = (isset($s['notas']) && stripos($s['notas'], 'Cliente:') === 0)
+                ? null : ($s['notas'] ?? null);
+            ?>
+            <?php if ($notasLimpias): ?>
             <div class="col-12">
-              <span class="text-muted">Notas:</span>
-              <?= htmlspecialchars($s['notas']) ?>
+              <span class="text-muted">Notas:</span> <?= htmlspecialchars($notasLimpias) ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($s['tienda_pedido'] && $s['pedido_id']): ?>
+            <div class="col-12">
+              <span class="text-muted">Pedido:</span>
+              <a href="<?= APP_URL ?>/modules/pedidos_tienda/ver.php?id=<?= $s['pedido_id'] ?>"
+                 style="font-weight:600;color:#1e293b" target="_blank">
+                #<?= htmlspecialchars($s['tienda_pedido']) ?>
+              </a>
             </div>
             <?php endif; ?>
 
@@ -485,32 +505,24 @@ $KANBAN_ACCIONES = [
             </div>
             <?php endif; ?>
 
-            <div class="col-12">
-              <span class="text-muted">Creado:</span>
-              <?= htmlspecialchars($s['solicitado_nombre'] ?? '—') ?>
-              &middot; <?= date('d/m/Y H:i', strtotime($s['created_at'])) ?>
+            <div class="col-12" style="color:#94a3b8">
+              Creado por <?= htmlspecialchars($s['solicitado_nombre'] ?? '—') ?>
+              &middot; <?= date('d/m/Y', strtotime($s['created_at'])) ?>
             </div>
 
             <?php if (!empty($hist)): ?>
-            <div class="col-12 mt-1">
-              <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">
-                Historial
-              </div>
-              <?php foreach ($hist as $hr):
-                $hEv = $ESTADOS[$hr['estado']] ?? ['label'=>$hr['estado'],'color'=>'#64748b'];
-              ?>
-              <div class="hist-row d-flex gap-2 align-items-start">
-                <span style="color:<?= $hEv['color'] ?>;font-weight:600;white-space:nowrap">
-                  <?= htmlspecialchars($hEv['label']) ?>
-                </span>
-                <?php if ($hr['comentario']): ?>
-                <span class="text-muted">— <?= htmlspecialchars(mb_strimwidth($hr['comentario'],0,60,'…')) ?></span>
+            <?php $hr = $hist[0]; $hEv = $ESTADOS[$hr['estado']] ?? ['label'=>$hr['estado'],'color'=>'#64748b']; ?>
+            <div class="col-12 mt-1 pt-1" style="border-top:1px solid #f1f5f9">
+              <span class="text-muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">Último estado</span>
+              <div class="d-flex align-items-center gap-2 mt-1">
+                <span style="color:<?= $hEv['color'] ?>;font-weight:600"><?= htmlspecialchars($hEv['label']) ?></span>
+                <?php if ($hr['usuario_nombre']): ?>
+                <span class="text-muted">· <?= htmlspecialchars($hr['usuario_nombre']) ?></span>
                 <?php endif; ?>
                 <span class="ms-auto text-muted" style="white-space:nowrap">
                   <?= date('d/m H:i', strtotime($hr['created_at'])) ?>
                 </span>
               </div>
-              <?php endforeach; ?>
             </div>
             <?php endif; ?>
           </div>

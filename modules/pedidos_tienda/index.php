@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
                 $dias = (new DateTime($pedRow['fecha_compra']))->diff(new DateTime('today'))->days;
                 crearSolicitudProduccion($db, [
                     'fuente'        => 'tienda',
-                    'titulo'        => 'Pedido Tienda: '.($pedRow['kit_nombre'] ?? '').' — '.$pedRow['cliente_nombre'],
+                    'titulo'        => ($pedRow['kit_nombre'] ?? 'Pedido sin kit'),
                     'tipo'          => 'armar_kit',
                     'kit_nombre'    => $pedRow['kit_nombre'],
                     'cantidad'      => (int)($pedRow['cantidad'] ?? 1),
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
                     'usuario_id'    => Auth::user()['id'],
                     'pedido_id'     => $pid,
                     'colegio_id'    => $pedRow['colegio_id'],
-                    'notas'         => 'Cliente: '.$pedRow['cliente_nombre'].' | '.($pedRow['ciudad'] ?? ''),
+                    'notas'         => null,
                     'historial_nota'=> 'Aprobado y enviado a producción',
                 ]);
             }
@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
                 $dias = (new DateTime($pedRow['fecha_compra']))->diff(new DateTime('today'))->days;
                 crearSolicitudProduccion($db, [
                     'fuente'        => 'tienda',
-                    'titulo'        => 'Pedido Tienda: '.($pedRow['kit_nombre'] ?? '').' — '.$pedRow['cliente_nombre'],
+                    'titulo'        => ($pedRow['kit_nombre'] ?? 'Pedido sin kit'),
                     'tipo'          => 'armar_kit',
                     'kit_nombre'    => $pedRow['kit_nombre'],
                     'cantidad'      => (int)($pedRow['cantidad'] ?? 1),
@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
                     'usuario_id'    => Auth::user()['id'],
                     'pedido_id'     => $pid,
                     'colegio_id'    => $pedRow['colegio_id'],
-                    'notas'         => 'Cliente: '.$pedRow['cliente_nombre'].' | '.($pedRow['ciudad'] ?? ''),
+                    'notas'         => null,
                     'historial_nota'=> 'Enviado a producción desde módulo Tienda',
                 ]);
             }
@@ -276,12 +276,11 @@ $colegios_pedidos = $db->query("
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-/* ── Semáforo ── */
-.sem-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
+/* ── Semáforo chips ── */
+.sem-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
 .sem-verde    {background:#22c55e}
 .sem-amarillo {background:#f59e0b}
 .sem-rojo     {background:#ef4444}
-.sem-completado{background:#94a3b8}
 /* ── Tabs de estado ── */
 .estado-tabs{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.85rem}
 .estado-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .75rem;border-radius:20px;
@@ -300,14 +299,9 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 .rt thead th{background:#1e293b;color:#fff;padding:.45rem .7rem;font-size:.73rem;font-weight:600;white-space:nowrap;border:none}
 .rt tbody td{padding:.4rem .7rem;font-size:.8rem;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 .rt tbody tr:hover td{background:#f8fafc}
-.borde-rojo       td:first-child{border-left:4px solid #ef4444!important}
-.borde-amarillo   td:first-child{border-left:4px solid #f59e0b!important}
-.borde-verde      td:first-child{border-left:4px solid #22c55e!important}
-.borde-completado td:first-child{border-left:4px solid #94a3b8!important;opacity:.8}
-/* ── Estado dropdown ── */
-.estado-sel{font-size:.72rem;padding:.18rem .3rem;border-radius:6px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;max-width:130px}
-/* ── Action buttons ── */
-.btn-act{font-size:.68rem;padding:.15rem .4rem;white-space:nowrap;border-radius:6px}
+/* ── Cambiar estado dropdown ── */
+.dd-estado .dropdown-item{padding:.3rem .75rem;font-size:.78rem;cursor:pointer}
+.dd-estado .dropdown-item:hover{background:#f1f5f9}
 /* ── Upload area ── */
 .upload-area{border:2px dashed #cbd5e1;border-radius:14px;padding:3rem;text-align:center;cursor:pointer}
 .upload-area:hover{background:#f8fafc}
@@ -328,8 +322,6 @@ tr.fila-sel td{background:#eff6ff!important}
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <?php if (!empty($pedidos)): ?>
-    <a href="stickers.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
-       class="btn btn-danger btn-sm"><i class="bi bi-printer me-1"></i>Etiquetas</a>
     <a href="lista_imprimible.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
        class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul me-1"></i>Lista</a>
     <?php endif; ?>
@@ -420,21 +412,13 @@ if ($totalGlobal == 0): ?>
 <div class="section-card py-2">
   <form method="GET" class="row g-2 align-items-center">
     <?php if ($fEstado): ?><input type="hidden" name="estado" value="<?= htmlspecialchars($fEstado) ?>"><?php endif; ?>
-    <div class="col-12 col-md-4">
+    <?php if ($fSem): ?><input type="hidden" name="sem" value="<?= htmlspecialchars($fSem) ?>"><?php endif; ?>
+    <div class="col-12 col-md-5">
       <input type="text" name="q" class="form-control form-control-sm"
              placeholder="&#x1F50D; Nombre, kit o #pedido..."
              value="<?= htmlspecialchars($fBusqRaw ?? $fBusq) ?>">
     </div>
-    <div class="col-6 col-md-3">
-      <select name="sem" class="form-select form-select-sm">
-        <option value="">Sem&aacute;foro (todos)</option>
-        <option value="rojo"       <?= $fSem==='rojo'      ?'selected':'' ?>>&#x1F534; Urgente &gt;7d</option>
-        <option value="amarillo"   <?= $fSem==='amarillo'  ?'selected':'' ?>>&#x1F7E1; En riesgo 6-7d</option>
-        <option value="verde"      <?= $fSem==='verde'     ?'selected':'' ?>>&#x1F7E2; Al d&iacute;a &le;5d</option>
-        <option value="completado" <?= $fSem==='completado'?'selected':'' ?>>&#x26AB; Completados</option>
-      </select>
-    </div>
-    <div class="col-6 col-md-3">
+    <div class="col-12 col-md-5">
       <select name="colegio" class="form-select form-select-sm">
         <option value="">Todos los colegios</option>
         <?php foreach ($colegios_pedidos as $c):
@@ -472,12 +456,9 @@ if ($totalGlobal == 0): ?>
           <input type="checkbox" class="chk-row" id="chk-all" title="Seleccionar todos"
                  onchange="selTodos(this.checked)">
         </th>
-        <th style="width:14px"></th>
         <th>#Orden</th>
         <th>Cliente</th>
         <th>Kit</th>
-        <th style="text-align:center">Cant.</th>
-        <th style="text-align:center">D&iacute;as</th>
         <th>Estado</th>
         <th>Acciones</th>
       </tr></thead>
@@ -485,25 +466,26 @@ if ($totalGlobal == 0): ?>
       <?php
       $semCol = ['rojo'=>'#ef4444','amarillo'=>'#f59e0b','verde'=>'#22c55e','completado'=>'#94a3b8'];
       foreach ($pedidos as $p):
-        $sc  = $semCol[$p['semaforo']] ?? '#ccc';
-        $est = $ESTADOS[$p['estado']] ?? ['label'=>$p['estado'],'bg'=>'#f1f5f9','txt'=>'#475569'];
+        $sc   = $semCol[$p['semaforo']] ?? '#ccc';
+        $est  = $ESTADOS[$p['estado']] ?? ['label'=>$p['estado'],'bg'=>'#f1f5f9','txt'=>'#475569'];
         $cant = (int)($p['cantidad'] ?? 1);
+        $diasTitle = $p['dias'] . ' días desde la compra';
       ?>
-      <tr class="borde-<?= $p['semaforo'] ?>" id="fila-<?= $p['id'] ?>">
-        <td style="text-align:center;border-left:4px solid <?= $sc ?>;padding:.4rem .45rem">
+      <tr id="fila-<?= $p['id'] ?>">
+        <!-- Checkbox — borde de color = urgencia; tooltip = días exactos -->
+        <td style="text-align:center;border-left:4px solid <?= $sc ?>;padding:.4rem .45rem"
+            title="<?= htmlspecialchars($diasTitle) ?>">
           <input type="checkbox" class="chk-row chk-pedido"
                  value="<?= $p['id'] ?>" data-order="<?= htmlspecialchars($p['woo_order_id']) ?>"
                  onchange="actualizarSel()">
         </td>
-        <td><span class="sem-dot sem-<?= $p['semaforo'] ?>" title="<?= $p['semaforo'] ?>"></span></td>
-        <td class="fw-semibold" style="white-space:nowrap">
+        <!-- #Orden -->
+        <td class="fw-bold" style="white-space:nowrap;font-size:.82rem">
           #<?= htmlspecialchars($p['woo_order_id']) ?>
         </td>
+        <!-- Cliente (sin teléfono) -->
         <td>
           <div class="fw-semibold" style="font-size:.81rem"><?= htmlspecialchars($p['cliente_nombre']) ?></div>
-          <?php if ($p['cliente_telefono']): ?>
-            <div class="text-muted" style="font-size:.71rem"><?= htmlspecialchars($p['cliente_telefono']) ?></div>
-          <?php endif; ?>
           <?php if ($p['colegio_bd'] || $p['colegio_nombre']): ?>
             <div style="font-size:.7rem;color:#1d4ed8">
               <i class="bi bi-building" style="font-size:.65rem"></i>
@@ -511,44 +493,66 @@ if ($totalGlobal == 0): ?>
             </div>
           <?php endif; ?>
         </td>
-        <td style="max-width:160px;font-size:.77rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            title="<?= htmlspecialchars($p['kit_nombre'] ?? '') ?>">
-          <?= htmlspecialchars($p['kit_nombre'] ?? '—') ?>
+        <!-- Kit + cantidad inline -->
+        <td style="max-width:170px">
+          <div style="font-size:.77rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+               title="<?= htmlspecialchars($p['kit_nombre'] ?? '') ?>">
+            <?= htmlspecialchars($p['kit_nombre'] ?? '—') ?>
+          </div>
+          <?php if ($cant > 1): ?>
+          <span class="badge bg-secondary" style="font-size:.65rem"><?= $cant ?> uds</span>
+          <?php endif; ?>
         </td>
-        <td style="text-align:center;font-size:.78rem;font-weight:600"><?= $cant ?></td>
-        <td style="text-align:center;font-weight:700;color:<?= $sc ?>;font-size:.8rem"><?= $p['dias'] ?>d</td>
+        <!-- Estado + dropdown mover a -->
         <td>
-          <span class="badge" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.7rem">
+          <span class="badge d-block mb-1" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.7rem">
             <?= strip_tags($est['label']) ?>
           </span>
-        </td>
-        <td>
-          <div class="d-flex gap-1 align-items-center flex-wrap">
-            <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
-            <form method="POST" style="display:inline">
-              <input type="hidden" name="action"    value="aprobar">
-              <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-              <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-              <button type="submit" class="btn btn-success btn-act"
-                      onclick="return confirm('Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
-                <i class="bi bi-check-lg"></i> Aprobar
-              </button>
-            </form>
-            <?php endif; ?>
-            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-act" title="Editar">
-              <i class="bi bi-pencil"></i>
-            </a>
-            <form method="POST" style="display:inline">
-              <input type="hidden" name="action"    value="cambiar_estado">
-              <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-              <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-              <select name="estado_nuevo" class="estado-sel" onchange="this.form.submit()" title="Cambiar estado">
-                <?php foreach ($ESTADOS as $k => $e): ?>
-                  <option value="<?= $k ?>" <?= $p['estado']===$k?'selected':'' ?>><?= strip_tags($e['label']) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </form>
+          <div class="dropdown dd-estado">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle py-0 px-2"
+                    style="font-size:.7rem" type="button" data-bs-toggle="dropdown">
+              Mover a
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+              <?php foreach ($ESTADOS as $ek => $ev): if ($p['estado'] === $ek) continue; ?>
+              <li>
+                <button class="dropdown-item" type="button"
+                        onclick="cambiarEstado(<?= $p['id'] ?>, '<?= $ek ?>',
+                                 '<?= addslashes(strip_tags($ev['label'])) ?>',
+                                 '<?= htmlspecialchars($p['woo_order_id']) ?>')">
+                  <span class="badge me-1"
+                        style="background:<?= $ev['bg'] ?>;color:<?= $ev['txt'] ?>;font-size:.65rem">
+                    <?= strip_tags($ev['label']) ?>
+                  </span>
+                </button>
+              </li>
+              <?php endforeach; ?>
+            </ul>
           </div>
+          <!-- Formulario oculto para cambio de estado -->
+          <form id="form-estado-<?= $p['id'] ?>" method="POST" style="display:none">
+            <input type="hidden" name="action"      value="cambiar_estado">
+            <input type="hidden" name="pedido_id"   value="<?= $p['id'] ?>">
+            <input type="hidden" name="csrf"        value="<?= Auth::csrfToken() ?>">
+            <input type="hidden" name="estado_nuevo" id="estado-val-<?= $p['id'] ?>">
+          </form>
+        </td>
+        <!-- Acciones principales -->
+        <td style="white-space:nowrap">
+          <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
+          <form method="POST" style="display:inline">
+            <input type="hidden" name="action"    value="aprobar">
+            <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
+            <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
+            <button type="submit" class="btn btn-success btn-sm me-1"
+                    onclick="return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
+              <i class="bi bi-check-lg me-1"></i>Aprobar
+            </button>
+          </form>
+          <?php endif; ?>
+          <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm" title="Ver detalle">
+            <i class="bi bi-pencil"></i>
+          </a>
         </td>
       </tr>
       <?php endforeach; ?>
@@ -584,6 +588,11 @@ if ($totalGlobal == 0): ?>
 </div>
 
 <script>
+function cambiarEstado(id, estado, label, orden) {
+    if (!confirm('¿Cambiar pedido #' + orden + ' a "' + label + '"?')) return;
+    document.getElementById('estado-val-' + id).value = estado;
+    document.getElementById('form-estado-' + id).submit();
+}
 function actualizarSel() {
     var chks  = document.querySelectorAll('.chk-pedido:checked');
     var todos = document.querySelectorAll('.chk-pedido');

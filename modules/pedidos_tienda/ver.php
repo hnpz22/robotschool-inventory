@@ -9,12 +9,14 @@ $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: ' . APP_URL . '/modules/pedidos_tienda/'); exit; }
 
 $ESTADOS = [
-    'pendiente'     => ['label'=>'Pendiente',           'color'=>'secondary'],
-    'en_produccion' => ['label'=>'En producción',        'color'=>'info'],
-    'listo_envio'   => ['label'=>'Listo para envío',     'color'=>'warning'],
-    'despachado'    => ['label'=>'Despachado',           'color'=>'primary'],
-    'entregado'     => ['label'=>'Entregado',            'color'=>'success'],
-    'cancelado'     => ['label'=>'Cancelado',            'color'=>'danger'],
+    'pendiente'        => ['label'=>'Pendiente',          'bg'=>'#fef9c3', 'txt'=>'#854d0e'],
+    'aprobado'         => ['label'=>'Aprobado',           'bg'=>'#dbeafe', 'txt'=>'#1d4ed8'],
+    'en_produccion'    => ['label'=>'En producción',      'bg'=>'#ffedd5', 'txt'=>'#9a3412'],
+    'listo_produccion' => ['label'=>'Listo producción',   'bg'=>'#d1fae5', 'txt'=>'#065f46'],
+    'en_alistamiento'  => ['label'=>'En alistamiento',    'bg'=>'#ede9fe', 'txt'=>'#5b21b6'],
+    'despachado'       => ['label'=>'Despachado',         'bg'=>'#bbf7d0', 'txt'=>'#14532d'],
+    'entregado'        => ['label'=>'Entregado',          'bg'=>'#f1f5f9', 'txt'=>'#475569'],
+    'cancelado'        => ['label'=>'Cancelado',          'bg'=>'#fee2e2', 'txt'=>'#991b1b'],
 ];
 
 $pedido = $db->query("
@@ -78,7 +80,7 @@ $usuarios = $db->query("SELECT id,nombre FROM usuarios WHERE activo=1 ORDER BY n
 
 $semCol=['rojo'=>'#ef4444','amarillo'=>'#f59e0b','verde'=>'#22c55e','completado'=>'#94a3b8'];
 $sc  = $semCol[$pedido['semaforo']] ?? '#ccc';
-$est = $ESTADOS[$pedido['estado']] ?? ['label'=>$pedido['estado'],'color'=>'secondary'];
+$est = $ESTADOS[$pedido['estado']] ?? ['label'=>$pedido['estado'],'bg'=>'#f1f5f9','txt'=>'#475569'];
 
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
@@ -100,9 +102,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     <span class="text-muted small">
       <?= date('d/m/Y', strtotime($pedido['fecha_compra'])) ?>
       &nbsp;&middot;&nbsp;
-      <span class="badge bg-<?= $est['color'] ?>"><?= $est['label'] ?></span>
-      &nbsp;&middot;&nbsp;
-      <span style="color:<?= $sc ?>;font-weight:700"><?= $pedido['dias'] ?> d&iacute;a(s) desde la compra</span>
+      <span class="badge" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>"><?= $est['label'] ?></span>
     </span>
   </div>
 </div>
@@ -112,29 +112,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <div class="row g-3">
   <div class="col-lg-4">
 
-    <div class="section-card">
-      <h6 class="fw-bold mb-2"><i class="bi bi-person-circle me-2 text-primary"></i>Cliente</h6>
-      <div class="fw-bold"><?= htmlspecialchars($pedido['cliente_nombre']) ?></div>
-      <?php if ($pedido['cliente_telefono']): ?><div class="small text-muted"><i class="bi bi-telephone me-1"></i><?= htmlspecialchars($pedido['cliente_telefono']) ?></div><?php endif; ?>
-      <?php if ($pedido['cliente_email']): ?><div class="small text-muted"><i class="bi bi-envelope me-1"></i><?= htmlspecialchars($pedido['cliente_email']) ?></div><?php endif; ?>
-      <?php if ($pedido['direccion']): ?><div class="small text-muted mt-1"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($pedido['direccion'].($pedido['ciudad']?', '.$pedido['ciudad']:'')) ?></div><?php endif; ?>
-    </div>
-
-    <div class="section-card">
-      <h6 class="fw-bold mb-2"><i class="bi bi-building me-2 text-info"></i>Colegio</h6>
-      <div class="fw-semibold" style="color:#1d4ed8"><?= htmlspecialchars($pedido['colegio_bd'] ?? $pedido['colegio_nombre'] ?? '&mdash;') ?></div>
-      <?php if ($pedido['colegio_id']): ?>
-        <a href="<?= APP_URL ?>/modules/colegios/ver.php?id=<?= $pedido['colegio_id'] ?>" class="btn btn-outline-primary btn-sm mt-2" style="font-size:.75rem"><i class="bi bi-eye me-1"></i>Ver colegio</a>
-      <?php endif; ?>
-    </div>
-
-    <div class="section-card">
-      <h6 class="fw-bold mb-2"><i class="bi bi-box-seam me-2 text-warning"></i>Producto</h6>
-      <div class="fw-semibold"><?= htmlspecialchars($pedido['kit_nombre'] ?? '&mdash;') ?></div>
-      <div class="text-muted small"><?= htmlspecialchars($pedido['categoria'] ?? '') ?></div>
-    </div>
-
-    <!-- Cambiar estado -->
+    <!-- 1. Cambiar Estado — acción principal, va primero -->
     <div class="section-card">
       <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Cambiar Estado</h6>
       <form method="POST">
@@ -150,11 +128,47 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           <input type="text" name="transportadora" class="form-control form-control-sm mb-2" placeholder="Transportadora" value="<?= htmlspecialchars($pedido['transportadora']??'') ?>">
         </div>
         <textarea name="nota" class="form-control form-control-sm mb-2" rows="2" placeholder="Nota opcional..."></textarea>
-        <button type="submit" class="btn btn-primary btn-sm w-100">Guardar cambio</button>
+        <button type="submit" class="btn btn-primary btn-sm w-100">Guardar cambio de estado</button>
       </form>
     </div>
 
-    <!-- Notas y asignación -->
+    <!-- 2. Cliente + Colegio — fusionados para reducir scroll -->
+    <div class="section-card">
+      <h6 class="fw-bold mb-2"><i class="bi bi-person-circle me-2 text-primary"></i>Cliente</h6>
+      <div class="fw-bold"><?= htmlspecialchars($pedido['cliente_nombre']) ?></div>
+      <?php if ($pedido['cliente_telefono']): ?><div class="small text-muted"><i class="bi bi-telephone me-1"></i><?= htmlspecialchars($pedido['cliente_telefono']) ?></div><?php endif; ?>
+      <?php if ($pedido['cliente_email']): ?><div class="small text-muted"><i class="bi bi-envelope me-1"></i><?= htmlspecialchars($pedido['cliente_email']) ?></div><?php endif; ?>
+      <?php if ($pedido['direccion']): ?><div class="small text-muted mt-1"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($pedido['direccion'].($pedido['ciudad']?', '.$pedido['ciudad']:'')) ?></div><?php endif; ?>
+      <?php if ($pedido['colegio_bd'] || $pedido['colegio_nombre']): ?>
+      <div class="mt-2 pt-2" style="border-top:1px solid #f1f5f9">
+        <div class="small text-muted mb-1"><i class="bi bi-building me-1"></i>Colegio</div>
+        <div class="fw-semibold" style="color:#1d4ed8;font-size:.88rem">
+          <?= htmlspecialchars($pedido['colegio_bd'] ?? $pedido['colegio_nombre']) ?>
+        </div>
+        <?php if ($pedido['colegio_id']): ?>
+          <a href="<?= APP_URL ?>/modules/colegios/ver.php?id=<?= $pedido['colegio_id'] ?>"
+             class="btn btn-outline-primary btn-sm mt-1" style="font-size:.75rem">
+            <i class="bi bi-eye me-1"></i>Ver colegio
+          </a>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- 3. Producto -->
+    <div class="section-card">
+      <h6 class="fw-bold mb-2"><i class="bi bi-box-seam me-2 text-warning"></i>Producto</h6>
+      <div class="fw-semibold"><?= htmlspecialchars($pedido['kit_nombre'] ?? '&mdash;') ?></div>
+      <?php $cant = (int)($pedido['cantidad'] ?? 1); ?>
+      <div class="text-muted small">
+        <?= htmlspecialchars($pedido['categoria'] ?? '') ?>
+        <?php if ($cant > 0): ?>
+          <span class="badge bg-secondary ms-1"><?= $cant ?> <?= $cant === 1 ? 'unidad' : 'unidades' ?></span>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- 4. Asignación y Notas -->
     <div class="section-card">
       <h6 class="fw-bold mb-3"><i class="bi bi-person-check me-2 text-success"></i>Asignaci&oacute;n y Notas</h6>
       <form method="POST">
@@ -171,7 +185,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
         <input type="date" name="fecha_limite" class="form-control form-control-sm mb-2" value="<?= $pedido['fecha_limite'] ?? '' ?>">
         <label class="form-label small mb-1">Notas internas</label>
         <textarea name="notas" class="form-control form-control-sm mb-2" rows="3"><?= htmlspecialchars($pedido['notas_internas']??'') ?></textarea>
-        <button type="submit" class="btn btn-outline-success btn-sm w-100">Guardar</button>
+        <button type="submit" class="btn btn-outline-success btn-sm w-100">Guardar notas</button>
       </form>
     </div>
 
@@ -185,17 +199,18 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <?php else: ?>
       <div class="timeline">
         <?php foreach ($historial as $h):
-          $ec = $ESTADOS[$h['estado_nuevo']] ?? ['label'=>$h['estado_nuevo'],'color'=>'secondary'];
+          $ec = $ESTADOS[$h['estado_nuevo']] ?? ['label'=>$h['estado_nuevo'],'bg'=>'#e2e8f0','txt'=>'#475569'];
+          $ea = isset($h['estado_ant']) ? ($ESTADOS[$h['estado_ant']] ?? ['label'=>$h['estado_ant'],'bg'=>'#e2e8f0','txt'=>'#475569']) : null;
         ?>
         <div class="d-flex gap-2 mb-3">
           <div class="t-dot"></div>
           <div>
             <div class="small fw-semibold">
-              <?php if ($h['estado_ant']): ?>
-                <span class="badge bg-secondary" style="font-size:.68rem"><?= strip_tags($ESTADOS[$h['estado_ant']]['label'] ?? $h['estado_ant']) ?></span>
+              <?php if ($ea && $h['estado_ant']): ?>
+                <span class="badge" style="background:<?= $ea['bg'] ?>;color:<?= $ea['txt'] ?>;font-size:.68rem"><?= strip_tags($ea['label']) ?></span>
                 <i class="bi bi-arrow-right mx-1 text-muted"></i>
               <?php endif; ?>
-              <span class="badge bg-<?= $ec['color'] ?>" style="font-size:.68rem"><?= strip_tags($ec['label']) ?></span>
+              <span class="badge" style="background:<?= $ec['bg'] ?>;color:<?= $ec['txt'] ?>;font-size:.68rem"><?= strip_tags($ec['label']) ?></span>
             </div>
             <?php if ($h['nota']): ?><div class="text-muted small mt-1"><?= htmlspecialchars($h['nota']) ?></div><?php endif; ?>
             <div class="text-muted" style="font-size:.7rem">
