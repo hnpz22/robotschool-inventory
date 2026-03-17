@@ -10,10 +10,15 @@ if (!empty($_SESSION['user_id'])) {
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD']==='POST') {
-    if (Auth::login(trim($_POST['email']??''), $_POST['password']??'')) {
-        header('Location: '.APP_URL.'/dashboard.php'); exit;
+    if (!Auth::csrfVerify($_POST['csrf'] ?? '')) {
+        $error = 'Token de seguridad inválido. Recarga la página.';
+    } else {
+        $res = Auth::login(trim($_POST['email']??''), $_POST['password']??'');
+        if ($res['ok']) {
+            header('Location: '.APP_URL.'/dashboard.php'); exit;
+        }
+        $error = 'Email o contraseña incorrectos.';
     }
-    $error = 'Email o contrasena incorrectos.';
 }
 
 $msClientId = defined('MS_CLIENT_ID') ? MS_CLIENT_ID : '';
@@ -76,6 +81,7 @@ body{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);min-height:100vh
 
   <!-- Login email/password -->
   <form method="POST">
+    <input type="hidden" name="csrf" value="<?= Auth::csrfToken() ?>">
     <div class="mb-3">
       <label class="form-label small fw-semibold">Email</label>
       <input type="email" name="email" class="form-control" required

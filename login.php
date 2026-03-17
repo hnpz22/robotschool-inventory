@@ -10,11 +10,15 @@ if (!empty($_SESSION['user_id'])) {
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $res = Auth::login(trim($_POST['email'] ?? ''), $_POST['password'] ?? '');
-    if ($res['ok']) {
-        header('Location: ' . APP_URL . '/dashboard.php'); exit;
+    if (!Auth::csrfVerify($_POST['csrf'] ?? '')) {
+        $error = 'Token de seguridad inválido. Recarga la página e intenta de nuevo.';
+    } else {
+        $res = Auth::login(trim($_POST['email'] ?? ''), $_POST['password'] ?? '');
+        if ($res['ok']) {
+            header('Location: ' . APP_URL . '/dashboard.php'); exit;
+        }
+        $error = $res['msg'];
     }
-    $error = $res['msg'];
 }
 ?><!DOCTYPE html>
 <html lang="es">
