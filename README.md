@@ -73,10 +73,13 @@ Desde phpMyAdmin (`http://localhost:8080`) o desde CLI (reemplaza `<DB_PASS>` po
 ```bash
 docker exec -i robotschool_db mysql \
   -u rsuser -p<DB_PASS> robotschool_inventory \
-  < database/seed.sql
+  < database/schema.sql && \
+  docker exec -i robotschool_db mysql \
+  -u rsuser -p<DB_PASS> robotschool_inventory \
+  < database/seeds.sql
 ```
 
-`seed.sql` crea todas las tablas, vistas y datos de referencia iniciales.
+`schema.sql` crea todas las tablas y vistas. `seeds.sql` inserta los datos de referencia iniciales.
 
 ### 5. Crear el primer usuario administrador
 
@@ -203,7 +206,8 @@ robotschool_inventory/
 │   └── uploads/                # Imágenes subidas (elementos, kits, colegios, etc.)
 │
 ├── database/
-│   └── seed.sql                # Esquema completo + datos iniciales
+│   ├── schema.sql              # Esquema completo: tablas y vistas
+│   └── seeds.sql               # Datos de referencia iniciales
 │
 ├── docker/
 │   ├── php.ini                 # Configuración PHP para el contenedor

@@ -45,7 +45,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "${DB_PORT:-3308}:3308"
+      - "${DB_PORT:-3308}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASS}"]
       interval: 10s
@@ -63,7 +63,7 @@ services:
       - "${PMA_PORT:-8082}:80"
     environment:
       PMA_HOST:     db
-      PMA_PORT:     3308
+      PMA_PORT:     3306
       PMA_USER:     root
       PMA_PASSWORD: ${DB_ROOT_PASS}
       UPLOAD_LIMIT: 64M

@@ -1,3 +1,6 @@
+# ── Encoding ──────────────────────────────────────────────────
+AddDefaultCharset UTF-8
+
 # ── Directorio listing ────────────────────────────────────────
 Options -Indexes
 
