@@ -224,7 +224,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           <tr>
             <td>
               <?php if ($e['foto']): ?>
-                <img src="<?= UPLOAD_URL.htmlspecialchars($e['foto']) ?>" style="width:36px;height:36px;object-fit:cover;border-radius:6px" alt="">
+                <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" style="width:36px;height:36px;object-fit:cover;border-radius:6px" alt="">
               <?php else: ?>
                 <div style="width:36px;height:36px;background:#f0f4ff;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#94a3b8"><i class="bi bi-cpu"></i></div>
               <?php endif; ?>
@@ -286,7 +286,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <div class="col-6 col-md-3 col-lg-2">
         <div class="elem-card h-100">
           <?php if ($e['foto']): ?>
-            <img src="<?= UPLOAD_URL.htmlspecialchars($e['foto']) ?>" class="elem-foto" alt="">
+            <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" class="elem-foto" alt="">
           <?php else: ?>
             <div class="elem-foto-ph"><i class="bi <?= htmlspecialchars($e['cat_icono']??'bi-cpu') ?>"></i></div>
           <?php endif; ?>

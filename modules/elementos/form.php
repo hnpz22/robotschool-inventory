@@ -3,6 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
+require_once dirname(__DIR__, 2) . '/includes/Storage.php';
 Auth::check();
 
 $db = Database::get();
@@ -16,10 +17,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Auth::csrfVerify($_POST['csrf'] ?? '')) die('CSRF inválido');
     try {
         $catId = (int)$_POST['categoria_id'];
-        $foto  = $elem['foto'] ?? null;
-        if (!empty($_FILES['foto']['tmp_name'])) {
-            $foto = subirFoto($_FILES['foto'], 'elementos');
+
+        // Para nuevos elementos generamos el código antes de subir la foto,
+        // así podemos incluirlo en el nombre del archivo en MinIO.
+        $codigoNuevo = null;
+        if (!$elem) {
+            $codigoNuevo = generarCodigo($catId);
         }
+
+        $foto        = $elem['foto'] ?? null;
+        $codigoFoto  = $elem ? $elem['codigo'] : $codigoNuevo;
+
+        if (!empty($_FILES['foto']['tmp_name'])) {
+            $file = $_FILES['foto'];
+            $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $dest = $codigoFoto . '_' . time() . '.' . $ext;
+            try {
+                // Borrar foto anterior de MinIO si era una URL de MinIO
+                if ($foto && (str_starts_with($foto, 'http://') || str_starts_with($foto, 'https://'))) {
+                    Storage::getInstance()->delete(MINIO_BUCKET_ELEMENTOS, basename($foto));
+                }
+                $foto = Storage::getInstance()->upload($file['tmp_name'], MINIO_BUCKET_ELEMENTOS, $dest);
+            } catch (Exception $e) {
+                // Fallback: guardar en assets/uploads/ si MinIO no está disponible
+                error_log('Storage MinIO falló, usando fallback local: ' . $e->getMessage());
+                $foto = subirFoto($file, 'elementos');
+            }
+        }
+
         $data = [
             'categoria_id'    => $catId,
             'proveedor_id'    => $_POST['proveedor_id'] ?: null,
@@ -48,9 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Elemento actualizado correctamente.';
             $elem = $db->query("SELECT * FROM elementos WHERE id=$id")->fetch();
         } else {
-            // INSERT — generar código automático
-            $codigo = generarCodigo($catId);
-            $data['codigo']     = $codigo;
+            // INSERT — código ya generado antes de la subida de foto
+            $data['codigo']     = $codigoNuevo;
             $data['stock_actual']= 0;
             $data['created_by'] = Auth::user()['id'];
             $cols = implode(',', array_keys($data));
@@ -256,7 +280,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <div class="section-card">
         <h6 class="fw-bold mb-3"><i class="bi bi-image me-2 text-primary"></i>Foto del Elemento</h6>
         <?php if ($elem && $elem['foto']): ?>
-          <img src="<?= UPLOAD_URL . htmlspecialchars($elem['foto']) ?>" class="img-fluid rounded mb-2 w-100" style="max-height:180px;object-fit:cover;" id="fotoPreview" alt="">
+          <img src="<?= htmlspecialchars(fotoUrl($elem['foto'])) ?>" class="img-fluid rounded mb-2 w-100" style="max-height:180px;object-fit:cover;" id="fotoPreview" alt="">
         <?php else: ?>
           <div class="bg-light rounded text-center p-4 mb-2" id="fotoPreviewBox">
             <i class="bi bi-image fs-2 text-muted"></i>
