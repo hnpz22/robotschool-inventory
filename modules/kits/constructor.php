@@ -95,7 +95,7 @@ $elementos = $db->query("
            c.nombre AS cat,c.color AS cat_color,c.prefijo
     FROM elementos e
     JOIN categorias c ON c.id=e.categoria_id
-    WHERE e.activo=1 AND e.stock_actual>0
+    WHERE e.activo=1
     ORDER BY c.nombre,e.nombre
 ")->fetchAll();
 
