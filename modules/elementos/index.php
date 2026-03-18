@@ -221,13 +221,14 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           ?>
           <tr>
             <td>
-              <div class="minio-thumb minio-thumb-table">
-                <?php if ($e['foto']): ?>
-                  <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" alt=""
-                       onerror="this.classList.add('img-error')">
-                <?php endif; ?>
-                <div class="minio-ph"><i class="bi bi-cpu"></i></div>
-              </div>
+              <?php if ($e['foto']): ?>
+                <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" alt=""
+                     style="width:56px;height:56px;object-fit:cover;border-radius:6px;display:block"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div style="display:none;width:56px;height:56px;background:#f0f4ff;border-radius:6px;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem"><i class="bi bi-cpu"></i></div>
+              <?php else: ?>
+                <div style="display:flex;width:56px;height:56px;background:#f0f4ff;border-radius:6px;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem"><i class="bi bi-cpu"></i></div>
+              <?php endif; ?>
             </td>
             <td><code style="font-size:.75rem;color:#185FA5"><?= htmlspecialchars($e['codigo']) ?></code></td>
             <td>
@@ -285,12 +286,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       ?>
       <div class="col-6 col-md-3 col-lg-2">
         <div class="elem-card h-100">
-          <div class="minio-thumb minio-thumb-card">
+          <div style="height:160px;overflow:hidden;background:#f0f4ff;position:relative;display:flex;align-items:center;justify-content:center">
+            <i class="bi <?= htmlspecialchars($e['cat_icono']??'bi-cpu') ?>" style="font-size:1.8rem;color:#94a3b8;position:absolute"></i>
             <?php if ($e['foto']): ?>
               <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" alt=""
-                   onerror="this.classList.add('img-error')">
+                   style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1"
+                   onerror="this.style.display='none'">
             <?php endif; ?>
-            <div class="minio-ph"><i class="bi <?= htmlspecialchars($e['cat_icono']??'bi-cpu') ?>" style="font-size:1.6rem"></i></div>
           </div>
           <div style="padding:.5rem .6rem">
             <div style="font-size:.7rem;font-weight:700;color:<?= $e['cat_color'] ?>"><?= htmlspecialchars($e['prefijo']) ?></div>

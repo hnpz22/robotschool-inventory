@@ -152,12 +152,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <div class="kit-card">
 
     <!-- Foto o placeholder -->
-    <div class="minio-thumb minio-thumb-card">
+    <div style="height:160px;overflow:hidden;background:linear-gradient(135deg,#f0f4ff,#e0e7ff);position:relative;display:flex;align-items:center;justify-content:center">
+      <span style="font-size:2.5rem;position:absolute;color:#6366f1">&#x1F4E6;</span>
       <?php if ($k['foto']): ?>
         <img src="<?= htmlspecialchars(fotoUrl($k['foto'])) ?>" alt=""
-             onerror="this.classList.add('img-error')">
+             style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1"
+             onerror="this.style.display='none'">
       <?php endif; ?>
-      <div class="minio-ph" style="font-size:2.5rem;color:#6366f1">&#x1F4E6;</div>
     </div>
 
     <div class="p-3">
