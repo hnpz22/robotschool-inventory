@@ -194,7 +194,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
              onclick="toggleItem(this,'proto',<?= $p['id'] ?>)">
           <div class="card-body p-2">
             <?php if ($p['foto']): ?>
-              <img src="<?= htmlspecialchars(fotoUrl($p['foto'])) ?>" class="w-100 rounded mb-1" style="height:60px;object-fit:cover" alt="">
+              <img src="<?= htmlspecialchars(fotoUrl($p['foto'])) ?>" class="w-100 rounded mb-1" style="height:60px;object-fit:cover" alt=""
+                   onerror="this.outerHTML='<div class=\'rounded mb-1 d-flex align-items-center justify-content-center\' style=\'height:55px;background:#fff0f0;color:#dc2626;font-size:1.5rem\'>&#x2702;</div>'">
             <?php else: ?>
               <div class="rounded mb-1 d-flex align-items-center justify-content-center" style="height:55px;background:#fff0f0;color:#dc2626;font-size:1.5rem">&#x2702;</div>
             <?php endif; ?>
@@ -242,7 +243,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
              onclick="toggleItem(this,'elem',<?= $e['id'] ?>)">
           <div class="card-body p-2">
             <?php if ($e['foto']): ?>
-              <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" class="w-100 rounded mb-1" style="height:55px;object-fit:cover" alt="">
+              <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" class="w-100 rounded mb-1" style="height:55px;object-fit:cover" alt=""
+                   onerror="this.outerHTML='<div class=\'rounded mb-1 d-flex align-items-center justify-content-center\' style=\'height:48px;background:#f0f4ff;color:<?= $catColor ?>;font-size:1.2rem\'><i class=\'bi bi-cpu\'></i></div>'">
             <?php else: ?>
               <div class="rounded mb-1 d-flex align-items-center justify-content-center" style="height:48px;background:#f0f4ff;color:<?= $catColor ?>;font-size:1.2rem"><i class="bi bi-cpu"></i></div>
             <?php endif; ?>

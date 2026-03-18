@@ -159,11 +159,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <?php foreach ($colegios as $col): ?>
       <tr>
         <td>
-          <?php if ($col['logo']): ?>
-            <img src="<?= htmlspecialchars(fotoUrl($col['logo'])) ?>" class="elem-foto" alt="">
-          <?php else: ?>
-            <div class="elem-foto-placeholder" style="background:#eaf1fd;">&#x1F3EB;</div>
-          <?php endif; ?>
+          <div class="minio-thumb minio-thumb-logo">
+            <?php if ($col['logo']): ?>
+              <img src="<?= htmlspecialchars(fotoUrl($col['logo'])) ?>" alt=""
+                   onerror="this.classList.add('img-error')">
+            <?php endif; ?>
+            <div class="minio-ph">&#x1F3EB;</div>
+          </div>
         </td>
         <td>
           <div class="fw-semibold"><?= htmlspecialchars($col['nombre']) ?></div>

@@ -73,8 +73,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <style>
 .kit-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;transition:.15s;height:100%}
 .kit-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);border-color:#93c5fd}
-.kit-foto{width:100%;height:130px;object-fit:cover}
-.kit-foto-ph{width:100%;height:130px;background:linear-gradient(135deg,#f0f4ff,#e0e7ff);display:flex;align-items:center;justify-content:center;font-size:2.5rem;color:#6366f1}
 .nivel-pill{font-size:.68rem;padding:.18rem .55rem;border-radius:20px;font-weight:700}
 .nivel-basico    {background:#dcfce7;color:#166534}
 .nivel-intermedio{background:#fef9c3;color:#854d0e}
@@ -154,11 +152,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <div class="kit-card">
 
     <!-- Foto o placeholder -->
-    <?php if ($k['foto']): ?>
-      <img src="<?= htmlspecialchars(fotoUrl($k['foto'])) ?>" class="kit-foto" alt="">
-    <?php else: ?>
-      <div class="kit-foto-ph">&#x1F4E6;</div>
-    <?php endif; ?>
+    <div class="minio-thumb minio-thumb-card">
+      <?php if ($k['foto']): ?>
+        <img src="<?= htmlspecialchars(fotoUrl($k['foto'])) ?>" alt=""
+             onerror="this.classList.add('img-error')">
+      <?php endif; ?>
+      <div class="minio-ph" style="font-size:2.5rem;color:#6366f1">&#x1F4E6;</div>
+    </div>
 
     <div class="p-3">
       <!-- Código + nivel -->

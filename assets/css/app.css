@@ -76,8 +76,27 @@
 /* ── Tabla inventario ── */
 .table-inv th  { background: #f0f4ff; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: #555; }
 .table-inv td  { vertical-align: middle; font-size: .9rem; }
-.elem-foto     { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; }
-.elem-foto-placeholder { width:48px; height:48px; border-radius:8px; background:#eaf1fd; display:flex; align-items:center; justify-content:center; color:var(--rs-blue); font-size:1.4rem; }
+
+/* ── MinIO image thumbnails — consistent sizing across all modules ── */
+.minio-thumb {
+  position: relative; overflow: hidden; flex-shrink: 0;
+  background: #f0f4ff;
+  display: flex; align-items: center; justify-content: center;
+}
+.minio-thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  position: relative; z-index: 1;
+}
+.minio-thumb .minio-ph {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; color: #94a3b8; z-index: 0;
+}
+.minio-thumb img.img-error { display: none; }
+/* Size variants */
+.minio-thumb-table { width: 60px; height: 60px; border-radius: 8px; }
+.minio-thumb-card  { width: 100%; height: 130px; }
+.minio-thumb-logo  { width: 48px; height: 48px; border-radius: 8px; }
 
 /* ── Progress stock ── */
 .stock-bar { height: 6px; border-radius: 4px; }

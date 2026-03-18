@@ -97,8 +97,6 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 .section-card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
 .elem-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;transition:.15s;cursor:pointer}
 .elem-card:hover{border-color:#3b82f6;box-shadow:0 4px 12px rgba(59,130,246,.15)}
-.elem-foto{width:100%;height:80px;object-fit:cover}
-.elem-foto-ph{width:100%;height:80px;background:#f8fafc;display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:#94a3b8}
 .stock-bar-wrap{height:4px;background:#f1f5f9;border-radius:2px;overflow:hidden}
 .stock-bar-fill{height:100%;border-radius:2px;transition:.3s}
 .vista-btn{padding:.3rem .7rem;border-radius:6px;border:.5px solid #e2e8f0;background:#fff;font-size:.8rem;cursor:pointer;color:#374151}
@@ -223,11 +221,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           ?>
           <tr>
             <td>
-              <?php if ($e['foto']): ?>
-                <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" style="width:36px;height:36px;object-fit:cover;border-radius:6px" alt="">
-              <?php else: ?>
-                <div style="width:36px;height:36px;background:#f0f4ff;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#94a3b8"><i class="bi bi-cpu"></i></div>
-              <?php endif; ?>
+              <div class="minio-thumb minio-thumb-table">
+                <?php if ($e['foto']): ?>
+                  <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" alt=""
+                       onerror="this.classList.add('img-error')">
+                <?php endif; ?>
+                <div class="minio-ph"><i class="bi bi-cpu"></i></div>
+              </div>
             </td>
             <td><code style="font-size:.75rem;color:#185FA5"><?= htmlspecialchars($e['codigo']) ?></code></td>
             <td>
@@ -285,11 +285,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       ?>
       <div class="col-6 col-md-3 col-lg-2">
         <div class="elem-card h-100">
-          <?php if ($e['foto']): ?>
-            <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" class="elem-foto" alt="">
-          <?php else: ?>
-            <div class="elem-foto-ph"><i class="bi <?= htmlspecialchars($e['cat_icono']??'bi-cpu') ?>"></i></div>
-          <?php endif; ?>
+          <div class="minio-thumb minio-thumb-card">
+            <?php if ($e['foto']): ?>
+              <img src="<?= htmlspecialchars(fotoUrl($e['foto'])) ?>" alt=""
+                   onerror="this.classList.add('img-error')">
+            <?php endif; ?>
+            <div class="minio-ph"><i class="bi <?= htmlspecialchars($e['cat_icono']??'bi-cpu') ?>" style="font-size:1.6rem"></i></div>
+          </div>
           <div style="padding:.5rem .6rem">
             <div style="font-size:.7rem;font-weight:700;color:<?= $e['cat_color'] ?>"><?= htmlspecialchars($e['prefijo']) ?></div>
             <div class="fw-semibold" style="font-size:.75rem;line-height:1.25;margin:.1rem 0"><?= htmlspecialchars(mb_strimwidth($e['nombre'],0,30,'...')) ?></div>
