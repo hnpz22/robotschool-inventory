@@ -27,6 +27,15 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
     /* Notif badge */
     .notif-dot{position:relative}
     .notif-dot .dot{position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:1.5px solid #1e2a3a}
+    /* ── Sidebar colapsado: ocultar elementos extra ── */
+    #sidebar.collapsed .sidebar-header img,
+    #sidebar.collapsed .sidebar-header .text-white-50,
+    #sidebar.collapsed .sidebar-user .rol-badge,
+    #sidebar.collapsed .sidebar-user div { display:none; }
+    #sidebar.collapsed .sidebar-user .avatar-circle,
+    #sidebar.collapsed .sidebar-user img[style*="border-radius"] { display:flex !important; margin:0 auto; }
+    /* Transición suave del contenido principal */
+    #page-content { transition: margin-left .25s ease; }
   </style>
 </head>
 <body>
@@ -331,10 +340,24 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
   <main class="p-3 p-md-4">
 
 <script>
+(function () {
+    // Restaurar estado al cargar (solo desktop)
+    if (window.innerWidth > 768 && localStorage.getItem('sidebarCollapsed') === '1') {
+        var s = document.getElementById('sidebar');
+        if (s) s.classList.add('collapsed');
+    }
+})();
+
 function toggleSidebar() {
     var s = document.getElementById('sidebar');
-    if (s) s.classList.toggle('collapsed');
-    // Mobile
-    if (window.innerWidth <= 768) s.classList.toggle('show');
+    if (!s) return;
+    if (window.innerWidth <= 768) {
+        // Móvil: deslizar dentro/fuera
+        s.classList.toggle('show');
+    } else {
+        // Desktop: colapsar a solo íconos
+        s.classList.toggle('collapsed');
+        localStorage.setItem('sidebarCollapsed', s.classList.contains('collapsed') ? '1' : '0');
+    }
 }
 </script>
