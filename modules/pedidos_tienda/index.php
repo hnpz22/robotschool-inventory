@@ -55,7 +55,8 @@ function rbs_fecha_fmt(string $fecha): string {
     return $fecha;
 }
 
-$puedeAprobar = in_array(Auth::user()['rol_id'], [1, 2]);
+$puedeAprobar  = in_array(Auth::user()['rol_id'], [1, 2]);
+$puedeEliminar = in_array(Auth::user()['rol_id'], [1, 2]);
 
 // ── Aprobar pedido ──
 if ($_SERVER['REQUEST_METHOD']==='POST'
@@ -165,6 +166,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
         $success = 'Estado actualizado correctamente.';
     }
 }
+
+// ── Eliminar pedido (temporal — solo desarrollo) ──
+if ($_SERVER['REQUEST_METHOD']==='POST'
+    && ($_POST['action']??'')==='eliminar_pedido'
+    && Auth::csrfVerify($_POST['csrf']??'')
+    && $puedeEliminar
+) {
+    $pid = (int)$_POST['pedido_id'];
+    if ($pid) {
+        $db->prepare("DELETE FROM tienda_pedidos_historial WHERE pedido_id = ?")->execute([$pid]);
+        $db->prepare("DELETE FROM tienda_pedidos WHERE id = ?")->execute([$pid]);
+    }
+    header('Location: index.php?msg=eliminado');
+    exit;
+}
+if (($_GET['msg'] ?? '') === 'eliminado') $success = 'Pedido eliminado correctamente.';
 
 // ── Filtros ──
 $fEstado     = $_GET['estado']      ?? '';
@@ -378,6 +395,12 @@ tr.fila-sel td{background:#eff6ff!important}
 
 <?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
+<?php if ($puedeEliminar): ?>
+<div class="alert alert-warning py-1 px-3 small mb-2 d-flex align-items-center gap-2" style="border-left:4px solid #f59e0b">
+  <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+  <span>&#x26A0; <strong>Modo desarrollo</strong> &mdash; eliminaci&oacute;n de pedidos habilitada</span>
+</div>
+<?php endif; ?>
 
 
 <?php
@@ -560,22 +583,36 @@ if ($totalGlobal == 0): ?>
           </span>
         </td>
         <!-- Acciones -->
-        <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
         <td>
-          <form method="POST" style="margin:0">
-            <input type="hidden" name="action"    value="aprobar">
-            <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-            <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-            <button type="submit" class="btn btn-success btn-sm w-100"
-                    style="font-size:.75rem"
-                    onclick="event.stopPropagation();return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
-              <i class="bi bi-check-lg"></i> Aprobar
-            </button>
-          </form>
+          <div class="d-flex gap-1 align-items-center">
+            <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
+            <form method="POST" style="margin:0;flex:1">
+              <input type="hidden" name="action"    value="aprobar">
+              <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
+              <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
+              <button type="submit" class="btn btn-success btn-sm w-100"
+                      style="font-size:.75rem"
+                      onclick="event.stopPropagation();return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
+                <i class="bi bi-check-lg"></i> Aprobar
+              </button>
+            </form>
+            <?php else: ?>
+            <span style="flex:1;text-align:center;color:#94a3b8;font-size:1rem">&#x2192;</span>
+            <?php endif; ?>
+            <?php if ($puedeEliminar): ?>
+            <form method="POST" style="margin:0">
+              <input type="hidden" name="action"    value="eliminar_pedido">
+              <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
+              <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
+              <button type="submit" class="btn btn-outline-danger btn-sm"
+                      style="font-size:.7rem;padding:.25rem .4rem" title="Eliminar pedido"
+                      onclick="event.stopPropagation();return confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            <?php endif; ?>
+          </div>
         </td>
-        <?php else: ?>
-        <td style="text-align:center;color:#94a3b8;font-size:1rem;vertical-align:middle">&#x2192;</td>
-        <?php endif; ?>
       </tr>
       <?php endforeach; ?>
       </tbody>
