@@ -496,15 +496,15 @@ if ($totalGlobal == 0): ?>
     <a href="stickers.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
        class="btn btn-danger btn-sm"><i class="bi bi-printer me-1"></i>Etiquetas (6/hoja)</a>
   </div>
-  <div class="table-responsive">
-    <table class="table table-hover mb-0 rt">
+  <div class="table-responsive" style="width:100%">
+    <table class="table table-hover mb-0 rt" style="width:100%;table-layout:fixed">
       <thead><tr>
-        <th style="width:36px;text-align:center">
+        <th style="width:40px;text-align:center">
           <input type="checkbox" class="chk-row" id="chk-all" title="Seleccionar todos"
                  onchange="selTodos(this.checked)">
         </th>
-        <th style="width:90px">#Orden</th>
-        <th style="width:100px;text-align:center">
+        <th style="width:90px;white-space:nowrap">#Orden</th>
+        <th style="width:100px;text-align:center;white-space:nowrap">
           <?php
             $nextDir  = ($fSort === 'fecha' && $fDir === 'ASC') ? 'desc' : 'asc';
             $sortIcon = match(true) {
@@ -521,10 +521,10 @@ if ($totalGlobal == 0): ?>
             Fecha <?= $sortIcon ?>
           </a>
         </th>
-        <th style="width:140px">Colegio</th>
+        <th style="width:15%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Colegio</th>
         <th>Kit</th>
-        <th style="width:130px">Estado</th>
-        <th style="min-width:150px">Acciones</th>
+        <th style="width:130px;text-align:center">Estado</th>
+        <th style="width:120px;text-align:center;white-space:nowrap">Acciones</th>
       </tr></thead>
       <tbody>
       <?php
@@ -561,11 +561,11 @@ if ($totalGlobal == 0): ?>
           <div style="font-size:.75rem;font-weight:600;color:<?= $diasColor ?>"><?= (int)$p['dias'] ?>d</div>
         </td>
         <!-- Colegio -->
-        <td style="max-width:130px">
-          <div style="font-size:.78rem;color:#1d4ed8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-               title="<?= htmlspecialchars($p['nombre_colegio'] ?? '') ?>">
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            title="<?= htmlspecialchars($p['nombre_colegio'] ?? '') ?>">
+          <span style="font-size:.78rem;color:#1d4ed8">
             <?= htmlspecialchars($p['nombre_colegio'] ?: '—') ?>
-          </div>
+          </span>
         </td>
         <!-- Kit + cantidad -->
         <td>
@@ -577,14 +577,14 @@ if ($totalGlobal == 0): ?>
           <?php endif; ?>
         </td>
         <!-- Estado (badge visual, sin dropdown) -->
-        <td>
+        <td style="text-align:center">
           <span class="badge d-block" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.7rem">
             <?= strip_tags($est['label']) ?>
           </span>
         </td>
         <!-- Acciones -->
-        <td>
-          <div class="d-flex gap-1 align-items-center flex-nowrap">
+        <td style="text-align:center;white-space:nowrap">
+          <div class="d-flex gap-1 align-items-center justify-content-center flex-nowrap">
             <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
             <form method="POST" style="margin:0">
               <input type="hidden" name="action"    value="aprobar">
