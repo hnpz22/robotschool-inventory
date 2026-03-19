@@ -498,10 +498,10 @@ if ($totalGlobal == 0): ?>
             Fecha <?= $sortIcon ?>
           </a>
         </th>
-        <th style="width:120px">Colegio</th>
-        <th style="width:160px">Kit</th>
-        <th style="width:110px">Estado</th>
-        <th style="width:200px">Acciones</th>
+        <th style="width:130px">Colegio</th>
+        <th>Kit</th>
+        <th style="width:130px">Estado</th>
+        <th style="width:110px">Acciones</th>
       </tr></thead>
       <tbody>
       <?php
@@ -512,13 +512,13 @@ if ($totalGlobal == 0): ?>
         $cant = (int)($p['cantidad'] ?? 1);
         $diasTitle = $p['dias'] . ' días desde la compra';
       ?>
-      <tr id="fila-<?= $p['id'] ?>">
+      <tr id="fila-<?= $p['id'] ?>" onclick="window.location='ver.php?id=<?= $p['id'] ?>'" style="cursor:pointer">
         <!-- Checkbox — borde de color = urgencia; tooltip = días exactos -->
         <td style="text-align:center;border-left:4px solid <?= $sc ?>;padding:.4rem .45rem"
             title="<?= htmlspecialchars($diasTitle) ?>">
           <input type="checkbox" class="chk-row chk-pedido"
                  value="<?= $p['id'] ?>" data-order="<?= htmlspecialchars($p['woo_order_id']) ?>"
-                 onchange="actualizarSel()">
+                 onclick="event.stopPropagation()" onchange="actualizarSel()">
         </td>
         <!-- #Orden -->
         <td class="fw-bold" style="white-space:nowrap;font-size:.82rem">
@@ -538,14 +538,14 @@ if ($totalGlobal == 0): ?>
           <div style="font-size:.75rem;font-weight:600;color:<?= $diasColor ?>"><?= (int)$p['dias'] ?>d</div>
         </td>
         <!-- Colegio -->
-        <td style="max-width:120px">
+        <td style="max-width:130px">
           <div style="font-size:.78rem;color:#1d4ed8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                title="<?= htmlspecialchars($p['nombre_colegio'] ?? '') ?>">
             <?= htmlspecialchars($p['nombre_colegio'] ?: '—') ?>
           </div>
         </td>
         <!-- Kit + cantidad -->
-        <td style="max-width:160px">
+        <td>
           <div style="font-size:.77rem;white-space:normal;word-break:break-word">
             <?= htmlspecialchars($p['kit_nombre'] ?? '—') ?>
           </div>
@@ -559,50 +559,23 @@ if ($totalGlobal == 0): ?>
             <?= strip_tags($est['label']) ?>
           </span>
         </td>
-        <!-- Acciones — layout varía según estado -->
+        <!-- Acciones -->
+        <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
         <td>
-          <?php if ($p['estado'] === 'pendiente'): ?>
-          <div class="d-flex gap-2">
-            <?php if ($puedeAprobar): ?>
-            <form method="POST" style="margin:0">
-              <input type="hidden" name="action"    value="aprobar">
-              <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-              <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-              <button type="submit" class="btn btn-success btn-sm"
-                      style="width:90px;font-size:.75rem"
-                      onclick="return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
-                <i class="bi bi-check-lg"></i> Aprobar
-              </button>
-            </form>
-            <?php endif; ?>
-            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm"
-               style="width:90px;font-size:.75rem">
-              <i class="bi bi-pencil"></i> Editar
-            </a>
-          </div>
-          <?php else: ?>
-          <div class="d-flex gap-2">
-            <select class="form-select form-select-sm"
-                    style="width:90px;font-size:.72rem"
-                    onchange="cambiarEstadoSelect(<?= $p['id'] ?>, '<?= htmlspecialchars($p['woo_order_id']) ?>', this)">
-              <option value="">&#x2195; Estado</option>
-              <?php foreach ($ESTADOS as $ek => $ev): if ($p['estado'] === $ek) continue; ?>
-              <option value="<?= $ek ?>"><?= strip_tags($ev['label']) ?></option>
-              <?php endforeach; ?>
-            </select>
-            <form id="form-estado-<?= $p['id'] ?>" method="POST" style="display:none">
-              <input type="hidden" name="action"       value="cambiar_estado">
-              <input type="hidden" name="pedido_id"    value="<?= $p['id'] ?>">
-              <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
-              <input type="hidden" name="estado_nuevo" id="estado-val-<?= $p['id'] ?>">
-            </form>
-            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm"
-               style="width:90px;font-size:.75rem">
-              <i class="bi bi-pencil"></i> Editar
-            </a>
-          </div>
-          <?php endif; ?>
+          <form method="POST" style="margin:0">
+            <input type="hidden" name="action"    value="aprobar">
+            <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
+            <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
+            <button type="submit" class="btn btn-success btn-sm w-100"
+                    style="font-size:.75rem"
+                    onclick="event.stopPropagation();return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
+              <i class="bi bi-check-lg"></i> Aprobar
+            </button>
+          </form>
         </td>
+        <?php else: ?>
+        <td style="text-align:center;color:#94a3b8;font-size:1rem;vertical-align:middle">&#x2192;</td>
+        <?php endif; ?>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -640,17 +613,6 @@ if ($totalGlobal == 0): ?>
 </div>
 
 <script>
-function cambiarEstadoSelect(id, orden, selectEl) {
-    var estado = selectEl.value;
-    if (!estado) return;
-    var label = selectEl.options[selectEl.selectedIndex].text;
-    if (!confirm('¿Cambiar pedido #' + orden + ' a "' + label + '"?')) {
-        selectEl.value = '';
-        return;
-    }
-    document.getElementById('estado-val-' + id).value = estado;
-    document.getElementById('form-estado-' + id).submit();
-}
 function actualizarSel() {
     var chks  = document.querySelectorAll('.chk-pedido:checked');
     var todos = document.querySelectorAll('.chk-pedido');
