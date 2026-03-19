@@ -55,8 +55,8 @@ function rbs_fecha_fmt(string $fecha): string {
     return $fecha;
 }
 
-$puedeAprobar  = in_array(Auth::user()['rol_id'], [1, 2]);
-$puedeEliminar = in_array(Auth::user()['rol_id'], [1, 2]);
+$puedeAprobar  = Auth::isAdmin();
+$puedeEliminar = Auth::isAdmin();
 
 // ── Aprobar pedido ──
 if ($_SERVER['REQUEST_METHOD']==='POST'
@@ -499,12 +499,12 @@ if ($totalGlobal == 0): ?>
   <div class="table-responsive">
     <table class="table table-hover mb-0 rt">
       <thead><tr>
-        <th style="width:32px;text-align:center">
+        <th style="width:36px;text-align:center">
           <input type="checkbox" class="chk-row" id="chk-all" title="Seleccionar todos"
                  onchange="selTodos(this.checked)">
         </th>
-        <th style="width:80px">#Orden</th>
-        <th style="width:90px;text-align:center">
+        <th style="width:90px">#Orden</th>
+        <th style="width:100px;text-align:center">
           <?php
             $nextDir  = ($fSort === 'fecha' && $fDir === 'ASC') ? 'desc' : 'asc';
             $sortIcon = match(true) {
@@ -521,10 +521,10 @@ if ($totalGlobal == 0): ?>
             Fecha <?= $sortIcon ?>
           </a>
         </th>
-        <th style="width:130px">Colegio</th>
+        <th style="width:140px">Colegio</th>
         <th>Kit</th>
         <th style="width:130px">Estado</th>
-        <th style="width:110px">Acciones</th>
+        <th style="min-width:150px">Acciones</th>
       </tr></thead>
       <tbody>
       <?php
@@ -584,20 +584,24 @@ if ($totalGlobal == 0): ?>
         </td>
         <!-- Acciones -->
         <td>
-          <div class="d-flex gap-1 align-items-center">
+          <div class="d-flex gap-1 align-items-center flex-nowrap">
             <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
-            <form method="POST" style="margin:0;flex:1">
+            <form method="POST" style="margin:0">
               <input type="hidden" name="action"    value="aprobar">
               <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
               <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-              <button type="submit" class="btn btn-success btn-sm w-100"
-                      style="font-size:.75rem"
+              <button type="submit" class="btn btn-success btn-sm"
+                      style="font-size:.75rem;white-space:nowrap"
                       onclick="event.stopPropagation();return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
                 <i class="bi bi-check-lg"></i> Aprobar
               </button>
             </form>
             <?php else: ?>
-            <span style="flex:1;text-align:center;color:#94a3b8;font-size:1rem">&#x2192;</span>
+            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm"
+               style="font-size:.75rem;white-space:nowrap"
+               onclick="event.stopPropagation()">
+              <i class="bi bi-eye"></i> Ver
+            </a>
             <?php endif; ?>
             <?php if ($puedeEliminar): ?>
             <form method="POST" style="margin:0">
@@ -605,7 +609,7 @@ if ($totalGlobal == 0): ?>
               <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
               <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
               <button type="submit" class="btn btn-outline-danger btn-sm"
-                      style="font-size:.7rem;padding:.25rem .4rem" title="Eliminar pedido"
+                      style="font-size:.75rem;padding:.25rem .45rem" title="Eliminar pedido"
                       onclick="event.stopPropagation();return confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')">
                 <i class="bi bi-trash"></i>
               </button>
