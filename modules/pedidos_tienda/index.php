@@ -480,8 +480,8 @@ if ($totalGlobal == 0): ?>
           <input type="checkbox" class="chk-row" id="chk-all" title="Seleccionar todos"
                  onchange="selTodos(this.checked)">
         </th>
-        <th>#Orden</th>
-        <th>
+        <th style="width:80px">#Orden</th>
+        <th style="width:90px;text-align:center">
           <?php
             $nextDir  = ($fSort === 'fecha' && $fDir === 'ASC') ? 'desc' : 'asc';
             $sortIcon = match(true) {
@@ -498,10 +498,10 @@ if ($totalGlobal == 0): ?>
             Fecha <?= $sortIcon ?>
           </a>
         </th>
-        <th>Cliente</th>
-        <th>Kit</th>
-        <th>Estado</th>
-        <th>Acciones</th>
+        <th style="width:120px">Colegio</th>
+        <th style="width:160px">Kit</th>
+        <th style="width:110px">Estado</th>
+        <th style="width:200px">Acciones</th>
       </tr></thead>
       <tbody>
       <?php
@@ -524,81 +524,84 @@ if ($totalGlobal == 0): ?>
         <td class="fw-bold" style="white-space:nowrap;font-size:.82rem">
           #<?= htmlspecialchars($p['woo_order_id']) ?>
         </td>
-        <!-- Fecha -->
-        <td style="white-space:nowrap;font-size:.78rem;color:#64748b">
+        <!-- Fecha + días con color según urgencia -->
+        <?php
+          $diasColor = match(true) {
+              in_array($p['estado'], ['entregado','cancelado','despachado']) => '#94a3b8',
+              (int)$p['dias'] <= 5 => '#22c55e',
+              (int)$p['dias'] <= 7 => '#f59e0b',
+              default               => '#ef4444',
+          };
+        ?>
+        <td style="text-align:center;white-space:nowrap;font-size:.78rem;color:#64748b">
           <?= htmlspecialchars(rbs_fecha_fmt($p['fecha_compra'] ?? '')) ?>
-          <div style="font-size:.68rem;color:#94a3b8"><?= (int)$p['dias'] ?>d</div>
+          <div style="font-size:.75rem;font-weight:600;color:<?= $diasColor ?>"><?= (int)$p['dias'] ?>d</div>
         </td>
-        <!-- Cliente -->
-        <td>
-          <div class="fw-semibold" style="font-size:.81rem"><?= htmlspecialchars($p['cliente_nombre']) ?></div>
-          <?php if ($p['nombre_colegio']): ?>
-            <div style="font-size:.7rem;color:#1d4ed8">
-              <i class="bi bi-building" style="font-size:.65rem"></i>
-              <?= htmlspecialchars($p['nombre_colegio']) ?>
-            </div>
-          <?php endif; ?>
+        <!-- Colegio -->
+        <td style="max-width:120px">
+          <div style="font-size:.78rem;color:#1d4ed8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+               title="<?= htmlspecialchars($p['nombre_colegio'] ?? '') ?>">
+            <?= htmlspecialchars($p['nombre_colegio'] ?: '—') ?>
+          </div>
         </td>
-        <!-- Kit + cantidad inline -->
-        <td style="max-width:170px">
-          <div style="font-size:.77rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-               title="<?= htmlspecialchars($p['kit_nombre'] ?? '') ?>">
+        <!-- Kit + cantidad -->
+        <td style="max-width:160px">
+          <div style="font-size:.77rem;white-space:normal;word-break:break-word">
             <?= htmlspecialchars($p['kit_nombre'] ?? '—') ?>
           </div>
           <?php if ($cant > 1): ?>
           <span class="badge bg-secondary" style="font-size:.65rem"><?= $cant ?> uds</span>
           <?php endif; ?>
         </td>
-        <!-- Estado + dropdown mover a -->
+        <!-- Estado (badge visual, sin dropdown) -->
         <td>
-          <span class="badge d-block mb-1" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.7rem">
+          <span class="badge d-block" style="background:<?= $est['bg'] ?>;color:<?= $est['txt'] ?>;font-size:.7rem">
             <?= strip_tags($est['label']) ?>
           </span>
-          <div class="dropdown dd-estado">
-            <button class="btn btn-outline-secondary btn-sm dropdown-toggle py-0 px-2"
-                    style="font-size:.7rem" type="button" data-bs-toggle="dropdown">
-              Mover a
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-              <?php foreach ($ESTADOS as $ek => $ev): if ($p['estado'] === $ek) continue; ?>
-              <li>
-                <button class="dropdown-item" type="button"
-                        onclick="cambiarEstado(<?= $p['id'] ?>, '<?= $ek ?>',
-                                 '<?= addslashes(strip_tags($ev['label'])) ?>',
-                                 '<?= htmlspecialchars($p['woo_order_id']) ?>')">
-                  <span class="badge me-1"
-                        style="background:<?= $ev['bg'] ?>;color:<?= $ev['txt'] ?>;font-size:.65rem">
-                    <?= strip_tags($ev['label']) ?>
-                  </span>
-                </button>
-              </li>
-              <?php endforeach; ?>
-            </ul>
-          </div>
-          <!-- Formulario oculto para cambio de estado -->
-          <form id="form-estado-<?= $p['id'] ?>" method="POST" style="display:none">
-            <input type="hidden" name="action"      value="cambiar_estado">
-            <input type="hidden" name="pedido_id"   value="<?= $p['id'] ?>">
-            <input type="hidden" name="csrf"        value="<?= Auth::csrfToken() ?>">
-            <input type="hidden" name="estado_nuevo" id="estado-val-<?= $p['id'] ?>">
-          </form>
         </td>
-        <!-- Acciones principales -->
-        <td style="white-space:nowrap">
-          <?php if ($p['estado'] === 'pendiente' && $puedeAprobar): ?>
-          <form method="POST" style="display:inline">
-            <input type="hidden" name="action"    value="aprobar">
-            <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-            <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
-            <button type="submit" class="btn btn-success btn-sm me-1"
-                    onclick="return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
-              <i class="bi bi-check-lg me-1"></i>Aprobar
-            </button>
-          </form>
+        <!-- Acciones — layout varía según estado -->
+        <td>
+          <?php if ($p['estado'] === 'pendiente'): ?>
+          <div class="d-flex gap-2">
+            <?php if ($puedeAprobar): ?>
+            <form method="POST" style="margin:0">
+              <input type="hidden" name="action"    value="aprobar">
+              <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
+              <input type="hidden" name="csrf"      value="<?= Auth::csrfToken() ?>">
+              <button type="submit" class="btn btn-success btn-sm"
+                      style="width:90px;font-size:.75rem"
+                      onclick="return confirm('¿Aprobar pedido #<?= htmlspecialchars($p['woo_order_id']) ?> y enviar a producción?')">
+                <i class="bi bi-check-lg"></i> Aprobar
+              </button>
+            </form>
+            <?php endif; ?>
+            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm"
+               style="width:90px;font-size:.75rem">
+              <i class="bi bi-pencil"></i> Editar
+            </a>
+          </div>
+          <?php else: ?>
+          <div class="d-flex gap-2">
+            <select class="form-select form-select-sm"
+                    style="width:90px;font-size:.72rem"
+                    onchange="cambiarEstadoSelect(<?= $p['id'] ?>, '<?= htmlspecialchars($p['woo_order_id']) ?>', this)">
+              <option value="">&#x2195; Estado</option>
+              <?php foreach ($ESTADOS as $ek => $ev): if ($p['estado'] === $ek) continue; ?>
+              <option value="<?= $ek ?>"><?= strip_tags($ev['label']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <form id="form-estado-<?= $p['id'] ?>" method="POST" style="display:none">
+              <input type="hidden" name="action"       value="cambiar_estado">
+              <input type="hidden" name="pedido_id"    value="<?= $p['id'] ?>">
+              <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
+              <input type="hidden" name="estado_nuevo" id="estado-val-<?= $p['id'] ?>">
+            </form>
+            <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm"
+               style="width:90px;font-size:.75rem">
+              <i class="bi bi-pencil"></i> Editar
+            </a>
+          </div>
           <?php endif; ?>
-          <a href="ver.php?id=<?= $p['id'] ?>" class="btn btn-outline-secondary btn-sm" title="Ver detalle">
-            <i class="bi bi-pencil"></i>
-          </a>
         </td>
       </tr>
       <?php endforeach; ?>
@@ -637,8 +640,14 @@ if ($totalGlobal == 0): ?>
 </div>
 
 <script>
-function cambiarEstado(id, estado, label, orden) {
-    if (!confirm('¿Cambiar pedido #' + orden + ' a "' + label + '"?')) return;
+function cambiarEstadoSelect(id, orden, selectEl) {
+    var estado = selectEl.value;
+    if (!estado) return;
+    var label = selectEl.options[selectEl.selectedIndex].text;
+    if (!confirm('¿Cambiar pedido #' + orden + ' a "' + label + '"?')) {
+        selectEl.value = '';
+        return;
+    }
     document.getElementById('estado-val-' + id).value = estado;
     document.getElementById('form-estado-' + id).submit();
 }
