@@ -167,48 +167,94 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
 }
 
 // ── Filtros ──
-$fEstado  = $_GET['estado']  ?? '';
-$fSem     = $_GET['sem']     ?? '';
-$fColegio = $_GET['colegio'] ?? '';
-$fBusqRaw = trim($_GET['q']  ?? '');
-$fBusq    = ltrim($fBusqRaw, '#');
-$pagina   = max(1, (int)($_GET['pag'] ?? 1));
-$porPag   = 30;
+$fEstado     = $_GET['estado']      ?? '';
+$fColegioId  = (int)($_GET['colegio_id'] ?? 0);
+$fKit        = trim($_GET['kit']    ?? '');
+$fPrioridad  = $_GET['prioridad']   ?? '';
+$fFechaDesde = $_GET['fecha_desde'] ?? '';
+$fFechaHasta = $_GET['fecha_hasta'] ?? '';
+$fBusqRaw    = trim($_GET['q']      ?? '');
+$fBusq       = ltrim($fBusqRaw, '#');
+$fSort       = $_GET['sort']        ?? '';
+$fDir        = in_array(strtolower($_GET['dir'] ?? ''), ['asc','desc'])
+               ? strtoupper($_GET['dir'])
+               : 'ASC';
+$pagina      = max(1, (int)($_GET['pag'] ?? 1));
+$porPag      = 30;
 
-$where = ["1=1"];
+$where  = ["1=1"];
+$params = [];
+
 if ($fEstado && isset($ESTADOS[$fEstado])) {
-    $where[] = "p.estado = " . $db->quote($fEstado);
+    $where[]  = "p.estado = ?";
+    $params[] = $fEstado;
 }
-if ($fColegio) {
-    $where[] = "(p.colegio_nombre LIKE " . $db->quote('%'.$fColegio.'%') .
-               " OR EXISTS (SELECT 1 FROM colegios c2 WHERE c2.id=p.colegio_id AND c2.nombre LIKE " . $db->quote('%'.$fColegio.'%') . "))";
+if ($fColegioId) {
+    $where[]  = "p.colegio_id = ?";
+    $params[] = $fColegioId;
+}
+if ($fKit) {
+    $where[]  = "p.kit_nombre LIKE ?";
+    $params[] = '%' . $fKit . '%';
+}
+if ($fFechaDesde) {
+    $where[]  = "DATE(p.fecha_compra) >= ?";
+    $params[] = $fFechaDesde;
+}
+if ($fFechaHasta) {
+    $where[]  = "DATE(p.fecha_compra) <= ?";
+    $params[] = $fFechaHasta;
 }
 if ($fBusq) {
-    $busqNum = preg_replace('/[^0-9]/', '', $fBusq);
-    $qLike   = $db->quote('%'.$fBusq.'%');
-    $cond    = "(p.cliente_nombre LIKE $qLike OR p.woo_order_id LIKE $qLike OR p.kit_nombre LIKE $qLike";
-    if ($busqNum) $cond .= " OR p.woo_order_id = " . $db->quote($busqNum);
-    $cond .= ")";
-    $where[] = $cond;
+    $busqNum  = preg_replace('/[^0-9]/', '', $fBusq);
+    $subConds = ["p.cliente_nombre LIKE ?", "p.woo_order_id LIKE ?", "p.kit_nombre LIKE ?"];
+    $params[] = '%' . $fBusq . '%';
+    $params[] = '%' . $fBusq . '%';
+    $params[] = '%' . $fBusq . '%';
+    if ($busqNum) {
+        $subConds[] = "p.woo_order_id = ?";
+        $params[]   = $busqNum;
+    }
+    $where[] = "(" . implode(" OR ", $subConds) . ")";
 }
-if ($fSem) {
-    switch ($fSem) {
-        case 'verde':     $where[] = "p.estado NOT IN ('entregado','cancelado','despachado') AND DATEDIFF(CURDATE(),p.fecha_compra)<=5"; break;
-        case 'amarillo':  $where[] = "p.estado NOT IN ('entregado','cancelado','despachado') AND DATEDIFF(CURDATE(),p.fecha_compra) BETWEEN 6 AND 7"; break;
-        case 'rojo':      $where[] = "p.estado NOT IN ('entregado','cancelado','despachado') AND DATEDIFF(CURDATE(),p.fecha_compra)>7"; break;
-        case 'completado':$where[] = "p.estado IN ('entregado','cancelado','despachado')"; break;
+if ($fPrioridad) {
+    switch ($fPrioridad) {
+        case 'rojo':
+            $where[] = "p.estado NOT IN ('entregado','cancelado','despachado') AND DATEDIFF(CURDATE(),p.fecha_compra) > 7";
+            break;
+        case 'amarillo':
+            $where[] = "p.estado NOT IN ('entregado','cancelado','despachado') AND DATEDIFF(CURDATE(),p.fecha_compra) BETWEEN 6 AND 7";
+            break;
+        case 'verde':
+            $where[] = "p.estado NOT IN ('entregado','cancelado','despachado') AND DATEDIFF(CURDATE(),p.fecha_compra) <= 5";
+            break;
+        case 'completado':
+            $where[] = "p.estado IN ('entregado','cancelado','despachado')";
+            break;
     }
 }
 $whereStr = implode(' AND ', $where);
 
-$total    = $db->query("SELECT COUNT(*) FROM tienda_pedidos p WHERE $whereStr")->fetchColumn();
-$totalPags= max(1, ceil($total / $porPag));
-$offset   = ($pagina - 1) * $porPag;
+$stCount = $db->prepare("SELECT COUNT(*) FROM tienda_pedidos p WHERE $whereStr");
+$stCount->execute($params);
+$total     = $stCount->fetchColumn();
+$totalPags = max(1, ceil($total / $porPag));
+$offset    = ($pagina - 1) * $porPag;
 
 $aprobadoJoin = $colAprobado ? "LEFT JOIN usuarios ua ON ua.id=p.aprobado_por" : "";
 $aprobadoSel  = $colAprobado ? ", ua.nombre AS aprobado_nombre" : "";
 
-$pedidos = $db->query("
+if ($fSort === 'fecha') {
+    $orderBy = "p.fecha_compra $fDir";
+} else {
+    $orderBy = "CASE WHEN p.estado IN ('entregado','cancelado','despachado') THEN 1 ELSE 0 END ASC,
+                CASE WHEN DATEDIFF(CURDATE(),p.fecha_compra)>7 THEN 0
+                     WHEN DATEDIFF(CURDATE(),p.fecha_compra)>5 THEN 1
+                     ELSE 2 END ASC,
+                p.fecha_compra ASC";
+}
+
+$st = $db->prepare("
     SELECT p.*,
            DATEDIFF(CURDATE(),p.fecha_compra) AS dias,
            CASE
@@ -217,22 +263,19 @@ $pedidos = $db->query("
              WHEN DATEDIFF(CURDATE(),p.fecha_compra)<=7 THEN 'amarillo'
              ELSE 'rojo'
            END AS semaforo,
-           col.nombre AS colegio_bd,
-           u.nombre   AS asignado_nombre
+           COALESCE(col.nombre, p.colegio_nombre) AS nombre_colegio,
+           u.nombre AS asignado_nombre
            $aprobadoSel
     FROM tienda_pedidos p
     LEFT JOIN colegios col ON col.id=p.colegio_id
     LEFT JOIN usuarios u   ON u.id=p.asignado_a
     $aprobadoJoin
     WHERE $whereStr
-    ORDER BY
-      CASE WHEN p.estado IN ('entregado','cancelado','despachado') THEN 1 ELSE 0 END ASC,
-      CASE WHEN DATEDIFF(CURDATE(),p.fecha_compra)>7 THEN 0
-           WHEN DATEDIFF(CURDATE(),p.fecha_compra)>5 THEN 1
-           ELSE 2 END ASC,
-      p.fecha_compra ASC
-    LIMIT $porPag OFFSET $offset
-")->fetchAll();
+    ORDER BY $orderBy
+    LIMIT ? OFFSET ?
+");
+$st->execute([...$params, $porPag, $offset]);
+$pedidos = $st->fetchAll();
 
 $stats = $db->query("
     SELECT
@@ -264,12 +307,11 @@ $statMap = [
 
 $colegios_pedidos = $db->query("
     SELECT DISTINCT
-      COALESCE(col.nombre, p.colegio_nombre) AS nombre_display,
-      p.colegio_nombre AS nombre_csv
+      p.colegio_id,
+      COALESCE(col.nombre, p.colegio_nombre) AS nombre_display
     FROM tienda_pedidos p
     LEFT JOIN colegios col ON col.id = p.colegio_id
-    WHERE (p.colegio_nombre IS NOT NULL AND p.colegio_nombre != '')
-       OR (p.colegio_id IS NOT NULL)
+    WHERE p.colegio_id IS NOT NULL
     ORDER BY nombre_display
 ")->fetchAll();
 
@@ -337,65 +379,6 @@ tr.fila-sel td{background:#eff6ff!important}
 <?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 
-<?php
-// ── Helper URL manteniendo parámetros actuales ──
-function urlFiltro(array $override): string {
-    $actual = ['estado' => $GLOBALS['fEstado'], 'sem' => $GLOBALS['fSem'],
-               'colegio'=> $GLOBALS['fColegio'], 'q'  => $GLOBALS['fBusqRaw'] ?? ''];
-    $params = array_filter(array_merge($actual, $override), fn($v) => $v !== '');
-    return '?' . http_build_query($params);
-}
-
-// ── Tabs de estado ──
-$tabs = [
-    ''                => ['label' => 'Todos',          'cnt' => $stats['total'],                'bg' => '#f1f5f9', 'txt' => '#475569'],
-    'pendiente'       => ['label' => 'Pendiente',      'cnt' => $stats['cnt_pendiente'],        'bg' => '#fef9c3', 'txt' => '#854d0e'],
-    'aprobado'        => ['label' => 'Aprobado',       'cnt' => $stats['cnt_aprobado'],         'bg' => '#dbeafe', 'txt' => '#1d4ed8'],
-    'en_produccion'   => ['label' => 'En producción',  'cnt' => $stats['cnt_en_produccion'],    'bg' => '#ffedd5', 'txt' => '#9a3412'],
-    'listo_produccion'=> ['label' => 'Listo',          'cnt' => $stats['cnt_listo_produccion'], 'bg' => '#d1fae5', 'txt' => '#065f46'],
-    'en_alistamiento' => ['label' => 'Alistamiento',   'cnt' => $stats['cnt_en_alistamiento'],  'bg' => '#ede9fe', 'txt' => '#5b21b6'],
-    'despachado'      => ['label' => 'Despachado',     'cnt' => $stats['cnt_despachado'],       'bg' => '#bbf7d0', 'txt' => '#14532d'],
-];
-?>
-
-<!-- ── Tabs de estado ── -->
-<div class="estado-tabs">
-  <?php foreach ($tabs as $k => $t):
-    $activo = ($fEstado === $k) && !$fSem;
-  ?>
-  <a href="<?= urlFiltro(['estado' => $k, 'sem' => '', 'pag' => '']) ?>"
-     class="estado-tab <?= $activo ? 'activo' : '' ?>"
-     style="background:<?= $t['bg'] ?>;color:<?= $t['txt'] ?>;<?= $activo ? 'border-color:'.$t['txt'] : '' ?>">
-    <?= htmlspecialchars($t['label']) ?>
-    <span class="tab-cnt"><?= (int)($t['cnt'] ?? 0) ?></span>
-  </a>
-  <?php endforeach; ?>
-</div>
-
-<!-- ── Semáforo (chips secundarios) ── -->
-<div class="d-flex gap-2 flex-wrap align-items-center mb-3">
-  <span class="text-muted" style="font-size:.72rem;font-weight:600">Semáforo:</span>
-  <a href="<?= urlFiltro(['sem'=>'rojo','estado'=>'','pag'=>'']) ?>"
-     class="sem-chip <?= $fSem==='rojo'?'activo':'' ?>"
-     style="background:#fee2e2;color:#991b1b;border-color:#fca5a5">
-    <span class="sem-dot sem-rojo"></span><?= $stats['rojos'] ?> &gt;7d
-  </a>
-  <a href="<?= urlFiltro(['sem'=>'amarillo','estado'=>'','pag'=>'']) ?>"
-     class="sem-chip <?= $fSem==='amarillo'?'activo':'' ?>"
-     style="background:#fef9c3;color:#854d0e;border-color:#fde68a">
-    <span class="sem-dot sem-amarillo"></span><?= $stats['amarillos'] ?> 6-7d
-  </a>
-  <a href="<?= urlFiltro(['sem'=>'verde','estado'=>'','pag'=>'']) ?>"
-     class="sem-chip <?= $fSem==='verde'?'activo':'' ?>"
-     style="background:#dcfce7;color:#166534;border-color:#86efac">
-    <span class="sem-dot sem-verde"></span><?= $stats['verdes'] ?> &le;5d
-  </a>
-  <?php if ($fEstado || $fSem || $fColegio || ($fBusqRaw ?? '')): ?>
-  <a href="?" class="sem-chip ms-2" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0">
-    &#10005; Limpiar filtros
-  </a>
-  <?php endif; ?>
-</div>
 
 <?php
 $totalGlobal = $db->query("SELECT COUNT(*) FROM tienda_pedidos")->fetchColumn();
@@ -408,29 +391,70 @@ if ($totalGlobal == 0): ?>
 </div>
 <?php else: ?>
 
-<!-- ── Búsqueda y filtros secundarios ── -->
-<div class="section-card py-2">
-  <form method="GET" class="row g-2 align-items-center">
-    <?php if ($fEstado): ?><input type="hidden" name="estado" value="<?= htmlspecialchars($fEstado) ?>"><?php endif; ?>
-    <?php if ($fSem): ?><input type="hidden" name="sem" value="<?= htmlspecialchars($fSem) ?>"><?php endif; ?>
-    <div class="col-12 col-md-5">
-      <input type="text" name="q" class="form-control form-control-sm"
-             placeholder="&#x1F50D; Nombre, kit o #pedido..."
-             value="<?= htmlspecialchars($fBusqRaw ?? $fBusq) ?>">
-    </div>
-    <div class="col-12 col-md-5">
-      <select name="colegio" class="form-select form-select-sm">
-        <option value="">Todos los colegios</option>
-        <?php foreach ($colegios_pedidos as $c):
-          $val = $c['nombre_csv'] ?: $c['nombre_display']; ?>
-          <option value="<?= htmlspecialchars($val) ?>" <?= $fColegio===$val?'selected':'' ?>>
-            <?= htmlspecialchars($c['nombre_display'] ?: $val) ?></option>
+<!-- ── Barra de filtros compacta ── -->
+<div class="section-card py-2 mb-3">
+  <form method="GET" class="row g-2 align-items-end flex-wrap">
+
+    <div class="col-auto">
+      <select name="estado" class="form-select form-select-sm" style="min-width:145px">
+        <option value="">Todos los estados</option>
+        <?php foreach ($ESTADOS as $k => $e): ?>
+        <option value="<?= $k ?>" <?= $fEstado === $k ? 'selected' : '' ?>>
+          <?= strip_tags($e['label']) ?>
+        </option>
         <?php endforeach; ?>
       </select>
     </div>
+
     <div class="col-auto">
-      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      <select name="colegio_id" class="form-select form-select-sm" style="min-width:150px">
+        <option value="">Todos los colegios</option>
+        <?php foreach ($colegios_pedidos as $c): ?>
+        <option value="<?= (int)$c['colegio_id'] ?>"
+                <?= $fColegioId === (int)$c['colegio_id'] ? 'selected' : '' ?>>
+          <?= htmlspecialchars($c['nombre_display']) ?>
+        </option>
+        <?php endforeach; ?>
+      </select>
     </div>
+
+    <div class="col-auto">
+      <input type="text" name="kit" class="form-control form-control-sm"
+             placeholder="Kit..." value="<?= htmlspecialchars($fKit) ?>"
+             style="width:130px">
+    </div>
+
+    <div class="col-auto">
+      <select name="prioridad" class="form-select form-select-sm">
+        <option value="">Prioridad</option>
+        <option value="rojo"       <?= $fPrioridad === 'rojo'       ? 'selected' : '' ?>>🔴 Urgente +7d</option>
+        <option value="amarillo"   <?= $fPrioridad === 'amarillo'   ? 'selected' : '' ?>>🟡 Normal 6-7d</option>
+        <option value="verde"      <?= $fPrioridad === 'verde'      ? 'selected' : '' ?>>🟢 Ok ≤5d</option>
+        <option value="completado" <?= $fPrioridad === 'completado' ? 'selected' : '' ?>>✅ Completado</option>
+      </select>
+    </div>
+
+    <div class="col-auto">
+      <input type="date" name="fecha_desde" class="form-control form-control-sm"
+             value="<?= htmlspecialchars($fFechaDesde) ?>" title="Compra desde">
+    </div>
+
+    <div class="col-auto">
+      <input type="date" name="fecha_hasta" class="form-control form-control-sm"
+             value="<?= htmlspecialchars($fFechaHasta) ?>" title="Compra hasta">
+    </div>
+
+    <div class="col">
+      <input type="text" name="q" class="form-control form-control-sm"
+             placeholder="&#x1F50D; Nombre, kit o #pedido..."
+             value="<?= htmlspecialchars($fBusqRaw) ?>">
+    </div>
+
+    <div class="col-auto d-flex gap-2">
+      <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+      <a href="index.php" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+    </div>
+
   </form>
 </div>
 
@@ -457,6 +481,23 @@ if ($totalGlobal == 0): ?>
                  onchange="selTodos(this.checked)">
         </th>
         <th>#Orden</th>
+        <th>
+          <?php
+            $nextDir  = ($fSort === 'fecha' && $fDir === 'ASC') ? 'desc' : 'asc';
+            $sortIcon = match(true) {
+                $fSort === 'fecha' && $fDir === 'ASC'  => '&#x2191;',
+                $fSort === 'fecha' && $fDir === 'DESC' => '&#x2193;',
+                default                                 => '&#x2195;',
+            };
+            $sortPrms = array_filter(
+                array_merge($_GET, ['sort'=>'fecha','dir'=>$nextDir,'pag'=>'']),
+                fn($v) => $v !== ''
+            );
+          ?>
+          <a href="?<?= http_build_query($sortPrms) ?>" class="text-white text-decoration-none">
+            Fecha <?= $sortIcon ?>
+          </a>
+        </th>
         <th>Cliente</th>
         <th>Kit</th>
         <th>Estado</th>
@@ -483,13 +524,18 @@ if ($totalGlobal == 0): ?>
         <td class="fw-bold" style="white-space:nowrap;font-size:.82rem">
           #<?= htmlspecialchars($p['woo_order_id']) ?>
         </td>
-        <!-- Cliente (sin teléfono) -->
+        <!-- Fecha -->
+        <td style="white-space:nowrap;font-size:.78rem;color:#64748b">
+          <?= htmlspecialchars(rbs_fecha_fmt($p['fecha_compra'] ?? '')) ?>
+          <div style="font-size:.68rem;color:#94a3b8"><?= (int)$p['dias'] ?>d</div>
+        </td>
+        <!-- Cliente -->
         <td>
           <div class="fw-semibold" style="font-size:.81rem"><?= htmlspecialchars($p['cliente_nombre']) ?></div>
-          <?php if ($p['colegio_bd'] || $p['colegio_nombre']): ?>
+          <?php if ($p['nombre_colegio']): ?>
             <div style="font-size:.7rem;color:#1d4ed8">
               <i class="bi bi-building" style="font-size:.65rem"></i>
-              <?= htmlspecialchars($p['colegio_bd'] ?: $p['colegio_nombre']) ?>
+              <?= htmlspecialchars($p['nombre_colegio']) ?>
             </div>
           <?php endif; ?>
         </td>
@@ -564,9 +610,12 @@ if ($totalGlobal == 0): ?>
   <div class="px-3 py-2 border-top">
     <nav><ul class="pagination pagination-sm mb-0 justify-content-center">
       <?php for ($i = 1; $i <= $totalPags; $i++):
-        $p2 = array_merge($_GET, ['pag' => $i]); ?>
+        $pageParams = array_filter(
+            array_merge($_GET, ['pag' => $i]),
+            fn($v) => $v !== '' && $v !== null
+        ); ?>
       <li class="page-item <?= $i===$pagina?'active':'' ?>">
-        <a class="page-link" href="?<?= http_build_query($p2) ?>"><?= $i ?></a>
+        <a class="page-link" href="?<?= http_build_query($pageParams) ?>"><?= $i ?></a>
       </li>
       <?php endfor; ?>
     </ul></nav>
