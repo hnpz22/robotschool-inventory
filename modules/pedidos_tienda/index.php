@@ -3,6 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
+require_once dirname(__DIR__, 2) . '/includes/WooSync.php';
 Auth::check();
 
 $db         = Database::get();
@@ -102,6 +103,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
             $db->prepare("INSERT INTO tienda_pedidos_historial (pedido_id,estado_ant,estado_nuevo,nota,usuario_id) VALUES (?,?,?,?,?)")
                ->execute([$pid, 'pendiente', 'aprobado', 'Aprobado por '.Auth::user()['nombre'], Auth::user()['id']]);
 
+            // Sincronizar con WooCommerce: marcar como on-hold (recibido/en preparación)
+            if (!empty($pedRow['woo_order_id']) && empty($pedRow['creado_desde_csv'])) {
+                $woo = new WooSync($db);
+                if ($woo->isConfigured()) $woo->actualizarEstado($pedRow['woo_order_id'], 'on-hold');
+            }
+
             $success = 'Pedido aprobado y enviado a producción.';
         }
     }
@@ -162,6 +169,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
 
         $db->prepare("INSERT INTO tienda_pedidos_historial (pedido_id,estado_ant,estado_nuevo,nota,usuario_id) VALUES (?,?,?,?,?)")
            ->execute([$pid, $actualEst, $nuevoEst, $nota ?: null, Auth::user()['id']]);
+
+        // Sincronizar con WooCommerce: marcar como completed al despachar
+        if ($nuevoEst === 'despachado') {
+            $wooRow = $db->query("SELECT woo_order_id, creado_desde_csv FROM tienda_pedidos WHERE id=$pid")->fetch();
+            if (!empty($wooRow['woo_order_id']) && empty($wooRow['creado_desde_csv'])) {
+                $woo = new WooSync($db);
+                if ($woo->isConfigured()) $woo->actualizarEstado($wooRow['woo_order_id'], 'completed');
+            }
+        }
 
         $success = 'Estado actualizado correctamente.';
     }
