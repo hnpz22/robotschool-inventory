@@ -234,4 +234,13 @@ class Auth {
             )->fetchColumn();
         } catch (Exception $e) { return 0; }
     }
+
+    public static function pedidosTiendaPendientes(): int {
+        if (!in_array(self::getRolId(), [1, 2])) return 0;
+        try {
+            return (int)Database::get()->query(
+                "SELECT COUNT(*) FROM tienda_pedidos WHERE estado='pendiente' AND creado_desde_csv=0"
+            )->fetchColumn();
+        } catch (Exception $e) { return 0; }
+    }
 }

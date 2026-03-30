@@ -7,6 +7,7 @@ $_rolId = Auth::getRolId();
 $_menu  = Auth::menuItems();
 $_np    = Auth::notificacionesPendientes();
 $_conv  = Auth::conveniosPendientes();
+$_pt    = Auth::pedidosTiendaPendientes();
 $_rm    = Auth::getRolMeta();
 $pageTitle = $pageTitle ?? (defined('APP_NAME') ? APP_NAME : 'ROBOTSchool');
 
@@ -155,6 +156,9 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='pedidos_tienda'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/pedidos_tienda/">
         <i class="bi bi-cart-check"></i> <span>Pedidos Tienda</span>
+        <?php if ($_pt > 0): ?>
+          <span class="badge bg-success ms-auto" style="font-size:.6rem"><?= $_pt ?></span>
+        <?php endif; ?>
       </a>
     </li>
     <?php endif; ?>
@@ -312,6 +316,12 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
       <?= htmlspecialchars($pageTitle) ?>
     </span>
     <div class="ms-auto d-flex align-items-center gap-2">
+      <?php if ($_pt > 0): ?>
+      <a href="<?= APP_URL ?>/modules/pedidos_tienda/"
+         class="btn btn-sm btn-success fw-semibold" style="font-size:.75rem">
+        <i class="bi bi-cart-check me-1"></i><?= $_pt ?> pedido(s) nuevo(s)
+      </a>
+      <?php endif; ?>
       <?php if ($_conv > 0): ?>
       <a href="<?= APP_URL ?>/modules/comercial/index.php"
          class="btn btn-sm btn-warning fw-semibold" style="font-size:.75rem">
