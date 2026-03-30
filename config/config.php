@@ -61,6 +61,13 @@ if (!empty($_msClientId)) {
     define('MS_TENANT_ID',     getenv('MS_TENANT_ID')     ?: 'common');
 }
 
+// ── WooCommerce ──
+define('WOO_WEBHOOK_SECRET', $_ENV['WOO_WEBHOOK_SECRET'] ?? getenv('WOO_WEBHOOK_SECRET') ?? '');
+define('WOO_URL',            $_ENV['WOO_URL']            ?? getenv('WOO_URL')            ?? '');
+define('WOO_CONSUMER_KEY',   $_ENV['WOO_CONSUMER_KEY']   ?? getenv('WOO_CONSUMER_KEY')   ?? '');
+define('WOO_CONSUMER_SECRET',$_ENV['WOO_CONSUMER_SECRET']?? getenv('WOO_CONSUMER_SECRET')?? '');
+define('WOO_CAMPO_COLEGIO',  $_ENV['WOO_CAMPO_COLEGIO']  ?? getenv('WOO_CAMPO_COLEGIO')  ?? '');
+
 // ── MinIO (almacenamiento S3-compatible) ──
 define('MINIO_ENDPOINT',          rtrim(getenv('MINIO_ENDPOINT')   ?: 'http://minio:9000', '/'));
 define('MINIO_PUBLIC_URL',        rtrim(getenv('MINIO_PUBLIC_URL') ?: '', '/'));
