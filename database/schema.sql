@@ -1267,7 +1267,13 @@ CREATE TABLE `solicitud_items` (
 CREATE TABLE `tienda_pedidos` (
   `id` int(10) UNSIGNED NOT NULL,
   `woo_order_id` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'ID del pedido en WooCommerce',
-  `estado` enum('pendiente','en_produccion','listo_envio','despachado','entregado','cancelado') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pendiente',
+  `estado` enum('pendiente','aprobado','en_produccion','listo_produccion','en_alistamiento','listo_envio','despachado','entregado','cancelado') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pendiente',
+  `woo_status` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Estado original en WooCommerce (processing, completed, etc.)',
+  `woo_payment_method` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Método de pago reportado por WooCommerce',
+  `woo_total` decimal(12,2) DEFAULT NULL COMMENT 'Total pagado según WooCommerce',
+  `woo_payload` json DEFAULT NULL COMMENT 'Payload JSON completo del webhook/API para auditoría',
+  `woo_items_payload` json DEFAULT NULL COMMENT 'Array de line_items del pedido WooCommerce',
+  `numero_pedido` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Número de pedido legible (#1234)',
   `cliente_nombre` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
   `cliente_telefono` varchar(60) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `cliente_email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -1276,6 +1282,7 @@ CREATE TABLE `tienda_pedidos` (
   `colegio_nombre` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `colegio_id` int(10) UNSIGNED DEFAULT NULL COMMENT 'FK a colegios si se cruza',
   `kit_nombre` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cantidad` smallint(5) UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Número de kits/unidades del pedido. Parseado del CSV; DEFAULT 1 para pedidos de API.',
   `categoria` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `fecha_compra` date NOT NULL,
   `fecha_limite` date DEFAULT NULL,
@@ -1284,6 +1291,9 @@ CREATE TABLE `tienda_pedidos` (
   `guia_envio` varchar(80) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `transportadora` varchar(80) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `notas_internas` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `instrucciones_especiales` text COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Nota especial del cliente al hacer el pedido (Customer Note del checkout)',
+  `aprobado_por` int(10) UNSIGNED DEFAULT NULL COMMENT 'FK a usuarios.id — quién aprobó el pedido',
+  `aprobado_at` datetime DEFAULT NULL COMMENT 'Timestamp de cuándo fue aprobado',
   `asignado_a` int(10) UNSIGNED DEFAULT NULL,
   `creado_desde_csv` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -1993,7 +2003,8 @@ ALTER TABLE `tienda_pedidos`
   ADD KEY `idx_estado` (`estado`),
   ADD KEY `idx_fecha` (`fecha_compra`),
   ADD KEY `idx_colegio` (`colegio_id`),
-  ADD KEY `fk_tp_user` (`asignado_a`);
+  ADD KEY `fk_tp_user` (`asignado_a`),
+  ADD KEY `fk_tp_aprobado` (`aprobado_por`);
 
 --
 -- Indices de la tabla `tienda_pedidos_historial`

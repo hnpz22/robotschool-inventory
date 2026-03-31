@@ -10,6 +10,7 @@ $db         = Database::get();
 $pageTitle  = 'Tablero de Produccion';
 $activeMenu = 'produccion';
 $error = $success = '';
+if (($_GET['msg'] ?? '') === 'al_ok') $success = 'Pedido enviado a alistamiento correctamente.';
 $userId = Auth::user()['id'];
 
 // Fuentes y sus metadatos
@@ -59,12 +60,21 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cambiar_est
         $db->prepare("INSERT INTO solicitud_historial (solicitud_id,estado,usuario_id,comentario) VALUES (?,?,?,?)")
            ->execute([$sid, $estado, $userId, $notas ?: null]);
 
-        // Si es listo → actualizar pedido de tienda si existe
-        if ($estado === 'listo') {
-            $pedidoId = $db->query("SELECT pedido_id FROM solicitudes_produccion WHERE id=$sid")->fetchColumn();
-            if ($pedidoId) {
-                $db->prepare("UPDATE tienda_pedidos SET estado='listo_produccion' WHERE id=?")
-                   ->execute([$pedidoId]);
+        // Sincronizar estado en tienda_pedidos para todos los cambios relevantes
+        $pedidoId = $db->query("SELECT pedido_id FROM solicitudes_produccion WHERE id=$sid")->fetchColumn();
+        if ($pedidoId) {
+            $estadoTienda = match($estado) {
+                'en_proceso' => 'en_produccion',
+                'listo'      => 'listo_produccion',
+                'pendiente'  => 'aprobado',
+                default      => null,
+            };
+            if ($estadoTienda) {
+                $estActualTienda = $db->query("SELECT estado FROM tienda_pedidos WHERE id=$pedidoId")->fetchColumn();
+                $db->prepare("UPDATE tienda_pedidos SET estado=?, updated_at=NOW() WHERE id=?")
+                   ->execute([$estadoTienda, $pedidoId]);
+                $db->prepare("INSERT INTO tienda_pedidos_historial (pedido_id,estado_ant,estado_nuevo,nota,usuario_id) VALUES (?,?,?,?,?)")
+                   ->execute([$pedidoId, $estActualTienda, $estadoTienda, 'Sincronizado desde producción (' . $estado . ')', $userId]);
             }
         }
         $success = 'Estado actualizado correctamente.';
@@ -104,6 +114,23 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='nueva_solic
     } catch (Exception $e) { $error = $e->getMessage(); }
 }
 
+// ── ENVIAR A ALISTAMIENTO ───────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='enviar_alistamiento') {
+    if (!Auth::csrfVerify($_POST['csrf']??'')) die('CSRF');
+    try {
+        $sid      = (int)$_POST['solicitud_id'];
+        $pidTienda = $db->query("SELECT pedido_id FROM solicitudes_produccion WHERE id=$sid")->fetchColumn();
+        if (!$pidTienda) throw new RuntimeException('Esta solicitud no tiene pedido de tienda vinculado.');
+        $estActual = $db->query("SELECT estado FROM tienda_pedidos WHERE id=$pidTienda")->fetchColumn();
+        if ($estActual !== 'listo_produccion') throw new RuntimeException('El pedido debe estar en estado Listo producción (actual: '.$estActual.').');
+        $db->prepare("UPDATE tienda_pedidos SET estado='en_alistamiento', updated_at=NOW() WHERE id=?")->execute([$pidTienda]);
+        $db->prepare("INSERT INTO tienda_pedidos_historial (pedido_id,estado_ant,estado_nuevo,nota,usuario_id) VALUES (?,?,?,?,?)")
+           ->execute([$pidTienda, $estActual, 'en_alistamiento', 'Enviado a alistamiento desde producción', $userId]);
+        header('Location: ' . APP_URL . '/modules/produccion/?msg=al_ok');
+        exit;
+    } catch (Exception $e) { $error = $e->getMessage(); }
+}
+
 // ── ELIMINAR ────────────────────────────────────────────────────
 if (isset($_GET['del']) && Auth::csrfVerify($_GET['csrf']??'')) {
     Auth::requireAdmin();
@@ -120,6 +147,8 @@ $where = ["1=1"];
 if ($fEstado) $where[] = "s.estado=".$db->quote($fEstado);
 if ($fFuente) $where[] = "s.fuente=".$db->quote($fFuente);
 if ($fPrior)  $where[] = "s.prioridad=".(int)$fPrior;
+// Excluir solicitudes cuyo pedido ya está en alistamiento o despachado
+$where[] = "(s.pedido_id IS NULL OR tp.estado IS NULL OR tp.estado NOT IN ('en_alistamiento','listo_envio','despachado','entregado','cancelado'))";
 $whereStr = implode(' AND ', $where);
 
 // Verificar columnas opcionales que dependen de migraciones
@@ -446,10 +475,14 @@ $KANBAN_ACCIONES = [
             <?php endif; ?>
 
             <?php if ($ek === 'listo' && $s['pedido_id']): ?>
-            <a href="<?= APP_URL ?>/modules/alistamiento/?pid=<?= $s['pedido_id'] ?>"
-               class="btn btn-sm btn-outline-primary">
-              <i class="bi bi-box-seam me-1"></i>Alistamiento
-            </a>
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="action"       value="enviar_alistamiento">
+              <input type="hidden" name="csrf"         value="<?= Auth::csrfToken() ?>">
+              <input type="hidden" name="solicitud_id" value="<?= $s['id'] ?>">
+              <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-box-seam me-1"></i>→ Alistamiento
+              </button>
+            </form>
             <?php endif; ?>
           </div>
         </div>

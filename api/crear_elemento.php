@@ -1,8 +1,8 @@
 <?php
-require_once dirname(__DIR__, 2) . '/config/config.php';
-require_once dirname(__DIR__, 2) . '/includes/Database.php';
-require_once dirname(__DIR__, 2) . '/includes/Auth.php';
-require_once dirname(__DIR__, 2) . '/includes/helpers.php';
+require_once dirname(__DIR__) . '/config/config.php';
+require_once dirname(__DIR__) . '/includes/Database.php';
+require_once dirname(__DIR__) . '/includes/Auth.php';
+require_once dirname(__DIR__) . '/includes/helpers.php';
 
 header('Content-Type: application/json');
 Auth::check();

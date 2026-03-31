@@ -3,10 +3,12 @@
  * modules/pedidos_tienda/importar.php
  * Importación CSV de pedidos WooCommerce.
  *
- * Reglas:
- *  - Solo importa pedidos con estado "procesando" / "processing"
- *  - Si woo_order_id ya existe → SKIP sin tocar nada
- *  - Muestra tabla resumen con resultado de cada fila
+ * Reglas por estado WooCommerce:
+ *  - "procesando" / "processing" → se importa como 'pendiente' (requiere aprobación manual)
+ *  - "recibido"                  → se importa y se auto-aprueba, pasa directo a 'en_produccion'
+ *  - "entregado" / "completed"   → se importa como 'entregado' (solo historial, nada que hacer)
+ *  - Cualquier otro estado       → se salta sin importar
+ *  - Si woo_order_id ya existe   → SKIP sin tocar nada
  */
 require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
@@ -19,13 +21,19 @@ $db         = Database::get();
 $pageTitle  = 'Importar Pedidos CSV';
 $activeMenu = 'pedidos_tienda';
 
-// ── Detectar columnas opcionales (dependen de que la migración 002 haya corrido) ──
+// ── Detectar columnas opcionales (dependen de que las migraciones hayan corrido) ──
 $colCantidad  = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='cantidad'")->fetchColumn();
 $colInstruc   = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='instrucciones_especiales'")->fetchColumn();
+$colWooStatus = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='woo_status'")->fetchColumn();
+$colAprobado  = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='aprobado_por'")->fetchColumn();
 
 // ── Helpers locales ──
 function tp_fecha_iso(string $f): string {
@@ -36,11 +44,20 @@ function tp_fecha_iso(string $f): string {
 function tp_colegio(string $cat): string {
     return strpos($cat, '>') !== false ? trim(explode('>', $cat)[1]) : '';
 }
-function tp_es_procesando(string $estWoo): bool {
+
+/**
+ * Clasifica el estado WooCommerce del CSV y devuelve la acción a tomar:
+ *  'pendiente'       → procesando/processing — importar como pendiente
+ *  'auto_produccion' → recibido/on-hold      — importar y auto-aprobar a en_produccion
+ *  'historico'       → entregado/completed   — importar como entregado (solo historial)
+ *  null              → cualquier otro estado — saltar sin importar
+ */
+function tp_clasificar_estado(string $estWoo): ?string {
     $e = strtolower(trim($estWoo));
-    return str_contains($e, 'procesando')
-        || str_contains($e, 'processing')
-        || $e === 'wc-processing';
+    if (str_contains($e, 'procesando') || $e === 'processing') return 'pendiente';
+    if (str_contains($e, 'recibido')   || $e === 'on-hold')    return 'auto_produccion';
+    if (str_contains($e, 'entregado')  || $e === 'completed')  return 'historico';
+    return null;
 }
 
 // ── Resultado de la importación (se llena en POST) ──
@@ -52,7 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && Auth::csrfVerify($_POST['csrf'] ?? '')
 ) {
     $file = $_FILES['csv_file'] ?? null;
-    $resumen = ['filas' => [], 'nuevos' => 0, 'omitidos' => 0, 'saltados' => 0, 'errores' => 0];
+    $resumen = [
+        'filas'            => [],
+        'nuevos_procesando'=> 0,
+        'nuevos_recibido'  => 0,
+        'nuevos_historico' => 0,
+        'omitidos'         => 0,
+        'saltados'         => 0,
+        'errores'          => 0,
+    ];
 
     if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
         $resumen['error_general'] = 'Error al subir el archivo (código ' . ($file['error'] ?? -1) . ')';
@@ -99,11 +124,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             return isset($idx[$campo]) ? trim($cols[$idx[$campo]] ?? '') : '';
         };
 
-        // Precargar woo_order_ids ya existentes para evitar un SELECT por fila
-        $existentes = $db->query("SELECT woo_order_id FROM tienda_pedidos")->fetchAll(PDO::FETCH_COLUMN);
-        $existentes = array_flip($existentes); // flip para O(1) lookup
+        // IDs ya en BD (para detectar duplicados reales entre importaciones)
+        $existentes_db = array_flip(
+            $db->query("SELECT woo_order_id FROM tienda_pedidos")->fetchAll(PDO::FETCH_COLUMN)
+        );
+        // IDs vistos en ESTE CSV (para detectar duplicados de pedidos con múltiples líneas de producto)
+        $existentes_csv = [];
 
-        $stInsert = null; // se prepara al primer INSERT real
+        $usuarioId = Auth::user()['id'];
 
         foreach ($lines as $line) {
             if (trim($line) === '') continue;
@@ -118,19 +146,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                 $fila['estado_woo'] = $estWoo;
                 $fila['nombre']     = trim($get($cols, 'nombre') . ' ' . $get($cols, 'apellido')) ?: 'Sin nombre';
 
-                // ── REGLA 1: solo "procesando" ──
-                if (!tp_es_procesando($estWoo)) {
+                // ── REGLA 1: clasificar el estado ──
+                $accion = tp_clasificar_estado($estWoo);
+                if ($accion === null) {
                     $fila['resultado'] = 'saltado';
                     $fila['detalle']   = 'Estado: ' . ($estWoo ?: '(vacío)');
                     $resumen['saltados']++;
                     $resumen['filas'][] = $fila;
+                    $existentes_csv[$wooId] = true; // evitar procesar otra fila del mismo pedido
                     continue;
                 }
 
-                // ── REGLA 2: SKIP si ya existe ──
-                if (isset($existentes[$wooId])) {
+                // ── REGLA 2: SKIP si ya existe (en BD o en este mismo CSV) ──
+                if (isset($existentes_db[$wooId]) || isset($existentes_csv[$wooId])) {
                     $fila['resultado'] = 'ya_existe';
-                    $fila['detalle']   = 'Ya estaba en la base de datos';
+                    $fila['detalle']   = isset($existentes_db[$wooId])
+                        ? 'Ya estaba en la base de datos'
+                        : 'Duplicado en el CSV (pedido con múltiples productos)';
                     $resumen['omitidos']++;
                     $resumen['filas'][] = $fila;
                     continue;
@@ -147,9 +179,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     $colegioId = $st->fetchColumn() ?: null;
                 }
 
+                // Estado interno según la clasificación
+                $estadoInterno = ($accion === 'historico') ? 'entregado' : 'pendiente';
+
                 $data = [
                     'woo_order_id'    => $wooId,
-                    'estado'          => 'pendiente',
+                    'estado'          => $estadoInterno,
                     'cliente_nombre'  => $fila['nombre'],
                     'cliente_telefono'=> $get($cols, 'telefono'),
                     'cliente_email'   => $get($cols, 'email'),
@@ -163,6 +198,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     'creado_desde_csv'=> 1,
                 ];
 
+                if ($colWooStatus) {
+                    $data['woo_status'] = $estWoo ?: null;
+                }
                 if ($colCantidad) {
                     $cant = (int)$get($cols, 'cantidad');
                     $data['cantidad'] = $cant > 0 ? $cant : 1;
@@ -179,16 +217,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
                 $newId = (int)$db->lastInsertId();
 
+                // Historial inicial
+                $notaHistorial = match($accion) {
+                    'pendiente'       => 'Importado desde CSV (procesando)',
+                    'auto_produccion' => 'Importado desde CSV (recibido)',
+                    'historico'       => 'Importado desde CSV como histórico (ya entregado en WooCommerce)',
+                    default           => 'Importado desde CSV',
+                };
                 $db->prepare("INSERT INTO tienda_pedidos_historial
                     (pedido_id, estado_ant, estado_nuevo, nota, usuario_id)
-                    VALUES (?, NULL, 'pendiente', 'Importado desde CSV', ?)")
-                   ->execute([$newId, Auth::user()['id']]);
+                    VALUES (?, NULL, ?, ?, ?)")
+                   ->execute([$newId, $estadoInterno, $notaHistorial, $usuarioId]);
 
-                // Añadir al mapa de existentes para evitar duplicados dentro del mismo CSV
-                $existentes[$wooId] = true;
+                // ── Auto-aprobación para estado "recibido" ──
+                if ($accion === 'auto_produccion') {
+                    $sets   = "estado='aprobado', updated_at=NOW()";
+                    $params = ['id' => $newId];
+                    if ($colAprobado) {
+                        $sets .= ", aprobado_por=:ap, aprobado_at=NOW()";
+                        $params['ap'] = $usuarioId;
+                    }
+                    $db->prepare("UPDATE tienda_pedidos SET $sets WHERE id=:id")->execute($params);
 
-                $fila['resultado'] = 'importado';
-                $resumen['nuevos']++;
+                    $db->prepare("INSERT INTO tienda_pedidos_historial
+                        (pedido_id, estado_ant, estado_nuevo, nota, usuario_id)
+                        VALUES (?, 'pendiente', 'aprobado', 'Auto-aprobado al importar (recibido en WooCommerce)', ?)")
+                       ->execute([$newId, $usuarioId]);
+
+                    // Crear solicitud de producción
+                    $fechaCompra = tp_fecha_iso($get($cols, 'fecha'));
+                    $dias = 0;
+                    try {
+                        $dias = (new DateTime($fechaCompra))->diff(new DateTime('today'))->days;
+                    } catch (Exception $e) {}
+
+                    $solicitudTablaExiste = $db->query("SHOW TABLES LIKE 'solicitudes_produccion'")->fetchColumn();
+                    if ($solicitudTablaExiste) {
+                        crearSolicitudProduccion($db, [
+                            'fuente'        => 'tienda',
+                            'titulo'        => ($data['kit_nombre'] ?? 'Pedido sin kit'),
+                            'tipo'          => 'armar_kit',
+                            'kit_nombre'    => $data['kit_nombre'] ?? null,
+                            'cantidad'      => (int)($data['cantidad'] ?? 1),
+                            'prioridad'     => $dias > 7 ? 1 : ($dias > 5 ? 2 : 3),
+                            'fecha_limite'  => null,
+                            'usuario_id'    => $usuarioId,
+                            'pedido_id'     => $newId,
+                            'colegio_id'    => $colegioId,
+                            'notas'         => null,
+                            'historial_nota'=> 'Auto-aprobado al importar CSV (recibido en WooCommerce)',
+                        ]);
+                    }
+
+                    $resumen['nuevos_recibido']++;
+                    $fila['resultado'] = 'importado_recibido';
+                    $fila['detalle']   = 'Auto-aprobado → En producción';
+
+                } elseif ($accion === 'historico') {
+                    $resumen['nuevos_historico']++;
+                    $fila['resultado'] = 'importado_historico';
+                    $fila['detalle']   = 'Registrado como historial';
+
+                } else {
+                    $resumen['nuevos_procesando']++;
+                    $fila['resultado'] = 'importado_procesando';
+                    $fila['detalle']   = 'Pendiente de aprobación';
+                }
+
+                // Registrar para evitar procesar otra fila del mismo pedido en este CSV
+                $existentes_csv[$wooId] = true;
 
             } catch (Exception $e) {
                 $fila['resultado'] = 'error';
@@ -208,7 +305,12 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <a href="<?= APP_URL ?>/modules/pedidos_tienda/" class="btn btn-sm btn-light"><i class="bi bi-arrow-left"></i></a>
   <div>
     <h4 class="fw-bold mb-0">Importar Pedidos CSV</h4>
-    <div class="text-muted small">Solo se importan pedidos con estado <strong>Procesando</strong>. Los duplicados se omiten sin modificar.</div>
+    <div class="text-muted small">
+      <strong>Procesando</strong> → pendiente de aprobación &nbsp;·&nbsp;
+      <strong>Recibido</strong> → auto-aprobado a producción &nbsp;·&nbsp;
+      <strong>Entregado</strong> → histórico &nbsp;·&nbsp;
+      Duplicados se omiten sin modificar
+    </div>
   </div>
 </div>
 
@@ -241,25 +343,37 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <?php if ($resumen !== null && !isset($resumen['error_general'])): ?>
 
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="section-card text-center py-3">
-      <div class="fs-3 fw-bold text-success"><?= $resumen['nuevos'] ?></div>
-      <div class="small text-muted">Importados</div>
+      <div class="fs-3 fw-bold text-warning"><?= $resumen['nuevos_procesando'] ?></div>
+      <div class="small text-muted">Procesando<br><span style="font-size:.7rem">→ Pendientes</span></div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
+    <div class="section-card text-center py-3">
+      <div class="fs-3 fw-bold text-primary"><?= $resumen['nuevos_recibido'] ?></div>
+      <div class="small text-muted">Recibido<br><span style="font-size:.7rem">→ En producción</span></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="section-card text-center py-3">
+      <div class="fs-3 fw-bold text-success"><?= $resumen['nuevos_historico'] ?></div>
+      <div class="small text-muted">Entregado<br><span style="font-size:.7rem">→ Histórico</span></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
     <div class="section-card text-center py-3">
       <div class="fs-3 fw-bold text-secondary"><?= $resumen['omitidos'] ?></div>
-      <div class="small text-muted">Ya existían (skip)</div>
+      <div class="small text-muted">Ya existían<br><span style="font-size:.7rem">(skip)</span></div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="section-card text-center py-3">
-      <div class="fs-3 fw-bold text-warning"><?= $resumen['saltados'] ?></div>
-      <div class="small text-muted">Otro estado</div>
+      <div class="fs-3 fw-bold" style="color:#94a3b8"><?= $resumen['saltados'] ?></div>
+      <div class="small text-muted">Otro estado<br><span style="font-size:.7rem">(saltados)</span></div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="section-card text-center py-3">
       <div class="fs-3 fw-bold text-danger"><?= $resumen['errores'] ?></div>
       <div class="small text-muted">Errores</div>
@@ -275,12 +389,14 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     </h6>
     <!-- Filtros rápidos por resultado -->
     <div class="btn-group btn-group-sm" role="group" id="filtroTabla">
-      <button type="button" class="btn btn-outline-secondary active" data-filtro="">Todos</button>
-      <button type="button" class="btn btn-outline-success"   data-filtro="importado">Importados</button>
-      <button type="button" class="btn btn-outline-secondary" data-filtro="ya_existe">Ya existían</button>
-      <button type="button" class="btn btn-outline-warning"   data-filtro="saltado">Otro estado</button>
+      <button type="button" class="btn btn-outline-secondary active"  data-filtro="">Todos</button>
+      <button type="button" class="btn btn-outline-warning"           data-filtro="importado_procesando">Procesando</button>
+      <button type="button" class="btn btn-outline-primary"           data-filtro="importado_recibido">Recibido</button>
+      <button type="button" class="btn btn-outline-success"           data-filtro="importado_historico">Entregado</button>
+      <button type="button" class="btn btn-outline-secondary"         data-filtro="ya_existe">Ya existían</button>
+      <button type="button" class="btn btn-outline-secondary"         data-filtro="saltado" style="color:#94a3b8">Saltados</button>
       <?php if ($resumen['errores']): ?>
-      <button type="button" class="btn btn-outline-danger"    data-filtro="error">Errores</button>
+      <button type="button" class="btn btn-outline-danger"            data-filtro="error">Errores</button>
       <?php endif; ?>
     </div>
   </div>
@@ -298,11 +414,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <tbody id="tablaResultado">
         <?php foreach ($resumen['filas'] as $f):
           $badge = match($f['resultado']) {
-            'importado' => ['success',   'Importado'],
-            'ya_existe' => ['secondary', 'Ya existía'],
-            'saltado'   => ['warning',   'Otro estado'],
-            'error'     => ['danger',    'Error'],
-            default     => ['light',     $f['resultado']],
+            'importado_procesando' => ['warning',   'Pendiente'],
+            'importado_recibido'   => ['primary',   'En producción'],
+            'importado_historico'  => ['success',   'Histórico'],
+            'ya_existe'            => ['secondary', 'Ya existía'],
+            'saltado'              => ['light',     'Saltado'],
+            'error'                => ['danger',    'Error'],
+            default                => ['light',     $f['resultado']],
           };
         ?>
         <tr data-resultado="<?= $f['resultado'] ?>">
@@ -319,7 +437,10 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if ($resumen['nuevos'] > 0): ?>
+<?php
+  $totalImportados = $resumen['nuevos_procesando'] + $resumen['nuevos_recibido'] + $resumen['nuevos_historico'];
+?>
+<?php if ($totalImportados > 0): ?>
   <div class="text-center mt-3">
     <a href="<?= APP_URL ?>/modules/pedidos_tienda/" class="btn btn-primary">
       <i class="bi bi-arrow-right me-2"></i>Ver pedidos importados

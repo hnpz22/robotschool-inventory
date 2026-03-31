@@ -170,7 +170,21 @@ class Auth {
     }
 
     public static function menuItems(): array {
-        return self::$ROL_MENUS[self::getRolId()] ?? self::$ROL_MENUS[6];
+        // Gerencia siempre tiene acceso total (definido estáticamente)
+        if (self::isGerencia()) return self::$ROL_MENUS[1];
+        $rolId = self::getRolId();
+        static $menuCache = [];
+        if (isset($menuCache[$rolId])) return $menuCache[$rolId];
+        try {
+            $rows = Database::get()
+                ->query("SELECT modulo FROM rol_permisos WHERE rol_id=$rolId AND ver=1")
+                ->fetchAll(PDO::FETCH_COLUMN);
+            if (!empty($rows)) {
+                return $menuCache[$rolId] = $rows;
+            }
+        } catch (Exception $e) {}
+        // Fallback a definición estática si la tabla no existe o está vacía
+        return $menuCache[$rolId] = self::$ROL_MENUS[$rolId] ?? self::$ROL_MENUS[6];
     }
 
     public static function tieneAcceso(string $modulo): bool {

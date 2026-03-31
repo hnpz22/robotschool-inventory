@@ -275,6 +275,14 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
         <i class="bi bi-people"></i> <span>Usuarios</span>
       </a>
     </li>
+    <?php if (Auth::isGerencia()): ?>
+    <li class="nav-item">
+      <a class="nav-link sidebar-link <?= ($activeMenu??'')==='roles'?'active':'' ?>"
+         href="<?= APP_URL ?>/modules/usuarios/roles.php">
+        <i class="bi bi-shield-lock"></i> <span>Roles y Permisos</span>
+      </a>
+    </li>
+    <?php endif; ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='categorias'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/elementos/categorias.php">

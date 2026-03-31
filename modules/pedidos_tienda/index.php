@@ -59,6 +59,11 @@ function rbs_fecha_fmt(string $fecha): string {
 $puedeAprobar  = Auth::isAdmin();
 $puedeEliminar = Auth::isAdmin();
 
+// ── Leer estado del modo limpieza ──
+$modoLimpieza = (bool)($db->query(
+    "SELECT valor FROM configuracion WHERE clave='modo_limpieza_pedidos'"
+)->fetchColumn());
+
 // ── Aprobar pedido ──
 if ($_SERVER['REQUEST_METHOD']==='POST'
     && ($_POST['action']??'')==='aprobar'
@@ -78,9 +83,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
             }
             $db->prepare("UPDATE tienda_pedidos SET $sets WHERE id=:id")->execute($params);
 
-            // Crear solicitud de producción si no existe
+            // Crear solicitud de producción si no hay una activa (ignora rechazadas)
             $yaExiste = $db->query("SHOW TABLES LIKE 'solicitudes_produccion'")->fetchColumn()
-                ? $db->query("SELECT COUNT(*) FROM solicitudes_produccion WHERE pedido_id=$pid")->fetchColumn()
+                ? $db->query("SELECT COUNT(*) FROM solicitudes_produccion WHERE pedido_id=$pid AND estado NOT IN ('rechazado')")->fetchColumn()
                 : 0;
             if (!$yaExiste) {
                 $dias = (new DateTime($pedRow['fecha_compra']))->diff(new DateTime('today'))->days;
@@ -142,11 +147,24 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
 
         $db->prepare("UPDATE tienda_pedidos SET $sets WHERE id=:id")->execute($params);
 
+        // Al retroceder a pendiente → cancelar la solicitud de producción activa
+        if ($nuevoEst === 'pendiente'
+            && $db->query("SHOW TABLES LIKE 'solicitudes_produccion'")->fetchColumn()
+        ) {
+            $solActiva = $db->query("SELECT id FROM solicitudes_produccion WHERE pedido_id=$pid AND estado NOT IN ('rechazado') LIMIT 1")->fetch();
+            if ($solActiva) {
+                $db->prepare("UPDATE solicitudes_produccion SET estado='rechazado', notas_respuesta=? WHERE id=?")
+                   ->execute(['Pedido retrocedido a pendiente desde tienda', $solActiva['id']]);
+                $db->prepare("INSERT INTO solicitud_historial (solicitud_id,estado,usuario_id,comentario) VALUES (?,?,?,?)")
+                   ->execute([$solActiva['id'], 'rechazado', Auth::user()['id'], 'Pedido retrocedido a pendiente']);
+            }
+        }
+
         // Crear solicitud de producción si se marca en_produccion y no viene del flujo aprobado
         if ($nuevoEst === 'en_produccion' && $actualEst !== 'en_produccion') {
             $pedRow  = $db->query("SELECT * FROM tienda_pedidos WHERE id=$pid")->fetch();
             $yaExiste = $db->query("SHOW TABLES LIKE 'solicitudes_produccion'")->fetchColumn()
-                ? $db->query("SELECT COUNT(*) FROM solicitudes_produccion WHERE pedido_id=$pid")->fetchColumn()
+                ? $db->query("SELECT COUNT(*) FROM solicitudes_produccion WHERE pedido_id=$pid AND estado NOT IN ('rechazado')")->fetchColumn()
                 : 0;
             if (!$yaExiste && $pedRow) {
                 $dias = (new DateTime($pedRow['fecha_compra']))->diff(new DateTime('today'))->days;
@@ -199,9 +217,75 @@ if ($_SERVER['REQUEST_METHOD']==='POST'
 }
 if (($_GET['msg'] ?? '') === 'eliminado') $success = 'Pedido eliminado correctamente.';
 
+// ── Toggle modo limpieza ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'toggle_modo_limpieza'
+    && Auth::csrfVerify($_POST['csrf'] ?? '')
+    && Auth::isAdmin()
+) {
+    $nuevoValor = $modoLimpieza ? '0' : '1';
+    $db->prepare(
+        "INSERT INTO configuracion (clave, valor, descripcion, grupo)
+         VALUES ('modo_limpieza_pedidos', ?, 'Habilita el borrado masivo de pedidos tienda (solo pruebas)', 'sistema')
+         ON DUPLICATE KEY UPDATE valor = VALUES(valor)"
+    )->execute([$nuevoValor]);
+    header('Location: index.php?msg=toggle_' . ($nuevoValor === '1' ? 'on' : 'off'));
+    exit;
+}
+if (($_GET['msg'] ?? '') === 'toggle_on')  $success = 'Modo limpieza activado. Recuerda desactivarlo cuando termines.';
+if (($_GET['msg'] ?? '') === 'toggle_off') $success = 'Modo limpieza desactivado.';
+if (($_GET['msg'] ?? '') === 'manual_ok')  $success = 'Pedido manual creado correctamente.' . (!empty($_GET['orden']) ? ' Orden: ' . htmlspecialchars($_GET['orden']) : '');
+
+// ── Limpiar todos los pedidos ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'limpiar_todos_pedidos'
+    && Auth::csrfVerify($_POST['csrf'] ?? '')
+    && Auth::isAdmin()
+    && $modoLimpieza
+) {
+    if (($_POST['confirmar'] ?? '') !== '1') {
+        $error = 'Debes marcar la casilla de confirmación para proceder.';
+    } else {
+        $db->beginTransaction();
+        try {
+            $totalBorrados = $db->query("SELECT COUNT(*) FROM tienda_pedidos")->fetchColumn();
+
+            // Borrar solicitudes de producción vinculadas si se pidió
+            $borroSolicitudes = 0;
+            if (($_POST['borrar_solicitudes'] ?? '') === '1') {
+                $db->query("DELETE FROM solicitudes_produccion WHERE fuente='tienda'");
+                $borroSolicitudes = 1;
+            }
+
+            // Borrar todos los pedidos (historial se borra en cascade)
+            $db->query("DELETE FROM tienda_pedidos");
+
+            auditoria(
+                'limpiar_pedidos_tienda',
+                'tienda_pedidos',
+                0,
+                ['total_pedidos' => $totalBorrados, 'solicitudes_borradas' => $borroSolicitudes],
+                []
+            );
+
+            $db->commit();
+            header('Location: index.php?msg=limpieza_ok&n=' . $totalBorrados . ($borroSolicitudes ? '&sol=1' : ''));
+            exit;
+        } catch (Exception $e) {
+            $db->rollBack();
+            $error = 'Error al limpiar: ' . $e->getMessage();
+        }
+    }
+}
+if (($_GET['msg'] ?? '') === 'limpieza_ok') {
+    $n   = (int)($_GET['n'] ?? 0);
+    $sol = !empty($_GET['sol']);
+    $success = "Se eliminaron $n pedidos" . ($sol ? ' y sus solicitudes de producción' : '') . '.';
+}
+
 // ── Filtros ──
 $fEstado     = $_GET['estado']      ?? '';
-$fColegioId  = (int)($_GET['colegio_id'] ?? 0);
+$fColegio    = trim($_GET['colegio'] ?? '');
 $fKit        = trim($_GET['kit']    ?? '');
 $fPrioridad  = $_GET['prioridad']   ?? '';
 $fFechaDesde = $_GET['fecha_desde'] ?? '';
@@ -213,7 +297,7 @@ $fDir        = in_array(strtolower($_GET['dir'] ?? ''), ['asc','desc'])
                ? strtoupper($_GET['dir'])
                : 'ASC';
 $pagina      = max(1, (int)($_GET['pag'] ?? 1));
-$porPag      = 30;
+$porPag      = 50;
 
 $where  = ["1=1"];
 $params = [];
@@ -222,9 +306,11 @@ if ($fEstado && isset($ESTADOS[$fEstado])) {
     $where[]  = "p.estado = ?";
     $params[] = $fEstado;
 }
-if ($fColegioId) {
-    $where[]  = "p.colegio_id = ?";
-    $params[] = $fColegioId;
+if ($fColegio) {
+    $like = '%' . $fColegio . '%';
+    $where[]  = "(p.colegio_nombre LIKE ? OR p.colegio_id IN (SELECT id FROM colegios WHERE nombre LIKE ?))";
+    $params[] = $like;
+    $params[] = $like;
 }
 if ($fKit) {
     $where[]  = "p.kit_nombre LIKE ?";
@@ -240,7 +326,9 @@ if ($fFechaHasta) {
 }
 if ($fBusq) {
     $busqNum  = preg_replace('/[^0-9]/', '', $fBusq);
-    $subConds = ["p.cliente_nombre LIKE ?", "p.woo_order_id LIKE ?", "p.kit_nombre LIKE ?"];
+    $subConds = ["p.cliente_nombre LIKE ?", "p.woo_order_id LIKE ?", "p.kit_nombre LIKE ?", "p.colegio_nombre LIKE ?", "p.ciudad LIKE ?"];
+    $params[] = '%' . $fBusq . '%';
+    $params[] = '%' . $fBusq . '%';
     $params[] = '%' . $fBusq . '%';
     $params[] = '%' . $fBusq . '%';
     $params[] = '%' . $fBusq . '%';
@@ -340,11 +428,11 @@ $statMap = [
 
 $colegios_pedidos = $db->query("
     SELECT DISTINCT
-      p.colegio_id,
       COALESCE(col.nombre, p.colegio_nombre) AS nombre_display
     FROM tienda_pedidos p
     LEFT JOIN colegios col ON col.id = p.colegio_id
-    WHERE p.colegio_id IS NOT NULL
+    WHERE COALESCE(col.nombre, p.colegio_nombre) IS NOT NULL
+      AND COALESCE(col.nombre, p.colegio_nombre) != ''
     ORDER BY nombre_display
 ")->fetchAll();
 
@@ -403,6 +491,9 @@ tr.fila-sel td{background:#eff6ff!important}
     <a href="<?= APP_URL ?>/modules/alistamiento/" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-box-seam me-1"></i>Alistamiento
     </a>
+    <a href="crear.php" class="btn btn-success btn-sm fw-semibold">
+      <i class="bi bi-bag-plus me-1"></i>Pedido manual
+    </a>
     <a href="importar.php" class="btn btn-primary btn-sm">
       <i class="bi bi-upload me-1"></i>Importar CSV
     </a>
@@ -446,15 +537,14 @@ if ($totalGlobal == 0): ?>
     </div>
 
     <div class="col-auto">
-      <select name="colegio_id" class="form-select form-select-sm" style="min-width:150px">
-        <option value="">Todos los colegios</option>
+      <input type="text" name="colegio" class="form-control form-control-sm"
+             list="lista-colegios" placeholder="Colegio..."
+             value="<?= htmlspecialchars($fColegio) ?>" style="min-width:160px">
+      <datalist id="lista-colegios">
         <?php foreach ($colegios_pedidos as $c): ?>
-        <option value="<?= (int)$c['colegio_id'] ?>"
-                <?= $fColegioId === (int)$c['colegio_id'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($c['nombre_display']) ?>
-        </option>
+        <option value="<?= htmlspecialchars($c['nombre_display']) ?>">
         <?php endforeach; ?>
-      </select>
+      </datalist>
     </div>
 
     <div class="col-auto">
@@ -640,17 +730,57 @@ if ($totalGlobal == 0): ?>
   </div>
 
   <?php if ($totalPags > 1): ?>
-  <div class="px-3 py-2 border-top">
-    <nav><ul class="pagination pagination-sm mb-0 justify-content-center">
-      <?php for ($i = 1; $i <= $totalPags; $i++):
-        $pageParams = array_filter(
-            array_merge($_GET, ['pag' => $i]),
-            fn($v) => $v !== '' && $v !== null
-        ); ?>
-      <li class="page-item <?= $i===$pagina?'active':'' ?>">
-        <a class="page-link" href="?<?= http_build_query($pageParams) ?>"><?= $i ?></a>
+  <div class="px-3 py-2 border-top d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <span class="text-muted small">
+      Mostrando <?= number_format($offset + 1) ?>–<?= number_format(min($offset + $porPag, $total)) ?>
+      de <?= number_format($total) ?> pedidos
+    </span>
+    <nav><ul class="pagination pagination-sm mb-0">
+      <?php
+        // ← Anterior
+        if ($pagina > 1):
+          $pp = array_filter(array_merge($_GET, ['pag' => $pagina - 1]), fn($v) => $v !== '' && $v !== null);
+      ?>
+      <li class="page-item">
+        <a class="page-link" href="?<?= http_build_query($pp) ?>">&#8249;</a>
       </li>
-      <?php endfor; ?>
+      <?php endif; ?>
+
+      <?php
+        // Rango inteligente: primeras 2, últimas 2, y ±2 alrededor de la página actual
+        if ($totalPags <= 9) {
+            $pRange = range(1, $totalPags);
+        } else {
+            $pRange = array_unique(array_merge(
+                [1, 2],
+                range(max(3, $pagina - 2), min($totalPags - 2, $pagina + 2)),
+                [$totalPags - 1, $totalPags]
+            ));
+            sort($pRange);
+        }
+        $prev = null;
+        foreach ($pRange as $i):
+          if ($prev !== null && $i - $prev > 1): ?>
+      <li class="page-item disabled">
+        <span class="page-link" style="padding:.3rem .5rem;pointer-events:none">…</span>
+      </li>
+      <?php endif;
+          $pp = array_filter(array_merge($_GET, ['pag' => $i]), fn($v) => $v !== '' && $v !== null);
+      ?>
+      <li class="page-item <?= $i === $pagina ? 'active' : '' ?>">
+        <a class="page-link" href="?<?= http_build_query($pp) ?>"><?= $i ?></a>
+      </li>
+      <?php $prev = $i; endforeach; ?>
+
+      <?php
+        // → Siguiente
+        if ($pagina < $totalPags):
+          $pp = array_filter(array_merge($_GET, ['pag' => $pagina + 1]), fn($v) => $v !== '' && $v !== null);
+      ?>
+      <li class="page-item">
+        <a class="page-link" href="?<?= http_build_query($pp) ?>">&#8250;</a>
+      </li>
+      <?php endif; ?>
     </ul></nav>
   </div>
   <?php endif; ?>
@@ -669,7 +799,89 @@ if ($totalGlobal == 0): ?>
   </div>
 </div>
 
+<?php if (Auth::isAdmin()): ?>
+<!-- ── Zona de riesgo ── -->
+<div style="border:2px solid #fca5a5;border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem;background:#fff5f5">
+  <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-exclamation-triangle-fill text-danger fs-5"></i>
+      <div>
+        <div class="fw-bold text-danger" style="font-size:.9rem">Zona de riesgo — Solo para pruebas</div>
+        <div class="text-muted" style="font-size:.75rem">
+          Herramienta para limpiar la base y re-importar CSVs durante desarrollo.
+          <?php if ($modoLimpieza): ?>
+            <span class="badge bg-danger ms-1">MODO LIMPIEZA ACTIVO</span>
+          <?php else: ?>
+            <span class="badge bg-secondary ms-1">desactivado</span>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+    <form method="POST" style="margin:0">
+      <input type="hidden" name="action" value="toggle_modo_limpieza">
+      <input type="hidden" name="csrf"   value="<?= Auth::csrfToken() ?>">
+      <?php if ($modoLimpieza): ?>
+        <button type="submit" class="btn btn-sm btn-outline-danger fw-bold"
+                onclick="return confirm('¿Desactivar el modo limpieza?')">
+          <i class="bi bi-lock me-1"></i>Desactivar modo limpieza
+        </button>
+      <?php else: ?>
+        <button type="submit" class="btn btn-sm btn-outline-secondary"
+                onclick="return confirm('¿Activar el modo limpieza? Esto habilitará el borrado masivo de pedidos.')">
+          <i class="bi bi-unlock me-1"></i>Activar modo limpieza
+        </button>
+      <?php endif; ?>
+    </form>
+  </div>
+
+  <?php if ($modoLimpieza): ?>
+  <?php $totalPedidos = (int)$db->query("SELECT COUNT(*) FROM tienda_pedidos")->fetchColumn(); ?>
+  <?php $totalSolicitudes = $db->query("SHOW TABLES LIKE 'solicitudes_produccion'")->fetchColumn()
+      ? (int)$db->query("SELECT COUNT(*) FROM solicitudes_produccion WHERE fuente='tienda'")->fetchColumn()
+      : 0; ?>
+  <hr style="border-color:#fca5a5;margin:.85rem 0">
+  <form method="POST" onsubmit="return validarLimpieza(this)">
+    <input type="hidden" name="action" value="limpiar_todos_pedidos">
+    <input type="hidden" name="csrf"   value="<?= Auth::csrfToken() ?>">
+    <div class="mb-3">
+      <div style="font-size:.82rem;color:#991b1b;font-weight:600;margin-bottom:.5rem">
+        <i class="bi bi-trash3 me-1"></i>
+        Se eliminarán <strong><?= number_format($totalPedidos) ?> pedidos</strong>
+        y su historial de estados. Esta acción <u>no se puede deshacer</u>.
+      </div>
+      <?php if ($totalSolicitudes > 0): ?>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="borrar_solicitudes" value="1" id="chk-sol">
+        <label class="form-check-label" for="chk-sol" style="font-size:.82rem">
+          También eliminar <strong><?= number_format($totalSolicitudes) ?> solicitudes de producción</strong>
+          vinculadas a pedidos tienda
+          <span class="text-muted">(fuente=tienda)</span>
+        </label>
+      </div>
+      <?php endif; ?>
+      <div class="form-check">
+        <input class="form-check-input border-danger" type="checkbox" name="confirmar" value="1" id="chk-confirm">
+        <label class="form-check-label fw-bold text-danger" for="chk-confirm" style="font-size:.82rem">
+          Confirmo que quiero eliminar todos los pedidos de la tienda
+        </label>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-danger btn-sm fw-bold">
+      <i class="bi bi-trash3-fill me-1"></i>Eliminar todo
+    </button>
+  </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <script>
+function validarLimpieza(form) {
+    if (!form.querySelector('[name="confirmar"]').checked) {
+        alert('Debes marcar la casilla de confirmación para proceder.');
+        return false;
+    }
+    return confirm('¿Estás seguro? Se borrarán TODOS los pedidos. Esta acción es irreversible.');
+}
 function actualizarSel() {
     var chks  = document.querySelectorAll('.chk-pedido:checked');
     var todos = document.querySelectorAll('.chk-pedido');

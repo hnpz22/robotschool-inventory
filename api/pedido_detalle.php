@@ -1,7 +1,7 @@
 <?php
-require_once dirname(__DIR__, 2) . '/config/config.php';
-require_once dirname(__DIR__, 2) . '/includes/Database.php';
-require_once dirname(__DIR__, 2) . '/includes/Auth.php';
+require_once dirname(__DIR__) . '/config/config.php';
+require_once dirname(__DIR__) . '/includes/Database.php';
+require_once dirname(__DIR__) . '/includes/Auth.php';
 Auth::check();
 header('Content-Type: application/json');
 
