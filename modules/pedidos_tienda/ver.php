@@ -208,8 +208,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           <?php if ($cant > 0): ?>
             <span class="badge bg-secondary ms-1"><?= $cant ?> <?= $cant === 1 ? 'unidad' : 'unidades' ?></span>
           <?php endif; ?>
-          <?php if (($pedido['total'] ?? 0) > 0): ?>
-            <span class="ms-2 fw-semibold text-primary">$<?= number_format((float)$pedido['total'], 0, ',', '.') ?></span>
+          <?php if (($pedido['woo_total'] ?? 0) > 0): ?>
+            <span class="ms-2 fw-semibold text-primary">$<?= number_format((float)$pedido['woo_total'], 0, ',', '.') ?></span>
           <?php endif; ?>
         </div>
       <?php endif; ?>

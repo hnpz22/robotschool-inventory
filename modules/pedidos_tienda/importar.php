@@ -34,6 +34,11 @@ $colWooStatus = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 $colAprobado  = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='aprobado_por'")->fetchColumn();
+$colWooTotal  = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='woo_total'")->fetchColumn();
+$tblItemsOk   = (bool) $db->query("SELECT COUNT(*) FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedido_items'")->fetchColumn();
 
 // ── Helpers locales ──
 function tp_fecha_iso(string $f): string {
@@ -74,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         'nuevos_procesando'=> 0,
         'nuevos_recibido'  => 0,
         'nuevos_historico' => 0,
+        'nuevos_multi'     => 0,
         'omitidos'         => 0,
         'saltados'         => 0,
         'errores'          => 0,
@@ -108,8 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             'kit'         => ['Nombre del producto (principal)', 'Line Items', 'Products'],
             'categoria'   => ['Nombres completos de las categorías', 'Category', 'Categorías'],
             'estado_woo'  => ['Estado del pedido', 'Status', 'Estado'],
-            'cantidad'    => ['Item #1 Quantity', 'Quantity', 'Cantidad', 'qty'],
-            'instruc'     => ['Customer Note', 'Nota del cliente', 'Order Notes', 'Customer Provided Note'],
+            'cantidad'        => ['Item #1 Quantity', 'Quantity', 'Cantidad', 'qty'],
+            'instruc'         => ['Customer Note', 'Nota del cliente', 'Order Notes', 'Customer Provided Note'],
+            'total_articulos' => ['Total de artículos', 'Total Items', 'Item Count'],
+            'precio_linea'    => ['Total de la línea del pedido', 'Line Total', 'Item Total'],
         ];
 
         $idx = [];
@@ -124,28 +132,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             return isset($idx[$campo]) ? trim($cols[$idx[$campo]] ?? '') : '';
         };
 
-        // IDs ya en BD (para detectar duplicados reales entre importaciones)
+        // IDs ya en BD (para detectar duplicados)
         $existentes_db = array_flip(
             $db->query("SELECT woo_order_id FROM tienda_pedidos")->fetchAll(PDO::FETCH_COLUMN)
         );
-        // IDs vistos en ESTE CSV (para detectar duplicados de pedidos con múltiples líneas de producto)
-        $existentes_csv = [];
 
         $usuarioId = Auth::user()['id'];
 
+        // ── Pre-paso: agrupar filas por woo_order_id ──
+        $grupos = [];
         foreach ($lines as $line) {
             if (trim($line) === '') continue;
             $cols  = str_getcsv($line, $sep);
             $wooId = trim($get($cols, 'id'), "# \t");
             if ($wooId === '') continue;
+            if (!isset($grupos[$wooId])) {
+                $grupos[$wooId] = ['rows' => [], 'total_articulos' => 0];
+            }
+            $grupos[$wooId]['rows'][] = $cols;
+            $ta = (int)$get($cols, 'total_articulos');
+            if ($ta > 0 && $grupos[$wooId]['total_articulos'] === 0) {
+                $grupos[$wooId]['total_articulos'] = $ta;
+            }
+        }
 
-            $fila = ['woo_id' => '#' . $wooId, 'nombre' => '', 'estado_woo' => '', 'resultado' => '', 'detalle' => ''];
+        // ── Procesar cada grupo ──
+        foreach ($grupos as $wooId => $grupo) {
+            $allRows    = $grupo['rows'];
+            $taEsperado = $grupo['total_articulos'];
+            $baseRow    = $allRows[0];
+
+            $estWoo  = $get($baseRow, 'estado_woo');
+            $nombre  = trim($get($baseRow, 'nombre') . ' ' . $get($baseRow, 'apellido')) ?: 'Sin nombre';
+            $fila    = ['woo_id' => '#' . $wooId, 'nombre' => $nombre, 'estado_woo' => $estWoo, 'resultado' => '', 'detalle' => ''];
 
             try {
-                $estWoo         = $get($cols, 'estado_woo');
-                $fila['estado_woo'] = $estWoo;
-                $fila['nombre']     = trim($get($cols, 'nombre') . ' ' . $get($cols, 'apellido')) ?: 'Sin nombre';
-
                 // ── REGLA 1: clasificar el estado ──
                 $accion = tp_clasificar_estado($estWoo);
                 if ($accion === null) {
@@ -153,25 +174,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     $fila['detalle']   = 'Estado: ' . ($estWoo ?: '(vacío)');
                     $resumen['saltados']++;
                     $resumen['filas'][] = $fila;
-                    $existentes_csv[$wooId] = true; // evitar procesar otra fila del mismo pedido
                     continue;
                 }
 
-                // ── REGLA 2: SKIP si ya existe (en BD o en este mismo CSV) ──
-                if (isset($existentes_db[$wooId]) || isset($existentes_csv[$wooId])) {
+                // ── REGLA 2: SKIP si ya existe en BD ──
+                if (isset($existentes_db[$wooId])) {
                     $fila['resultado'] = 'ya_existe';
-                    $fila['detalle']   = isset($existentes_db[$wooId])
-                        ? 'Ya estaba en la base de datos'
-                        : 'Duplicado en el CSV (pedido con múltiples productos)';
+                    $fila['detalle']   = 'Ya estaba en la base de datos';
                     $resumen['omitidos']++;
                     $resumen['filas'][] = $fila;
                     continue;
                 }
 
-                // ── Preparar datos ──
-                $cat     = $get($cols, 'categoria');
-                $colegio = tp_colegio($cat);
+                // ── Deduplicar ítems por nombre de producto ──
+                $seenKits   = [];
+                $uniqueRows = [];
+                foreach ($allRows as $row) {
+                    $kitKey = strtolower(trim($get($row, 'kit')));
+                    if (!isset($seenKits[$kitKey])) {
+                        $seenKits[$kitKey] = true;
+                        $uniqueRows[] = $row;
+                    }
+                }
+                $isMulti = count($uniqueRows) > 1;
 
+                // ── Calcular total del pedido (suma de líneas) ──
+                $wooTotal = 0.0;
+                foreach ($uniqueRows as $row) {
+                    $wooTotal += (float)$get($row, 'precio_linea');
+                }
+
+                // ── Aviso si artículos != esperado ──
+                $avisoItems = '';
+                if ($taEsperado > 0 && count($uniqueRows) !== $taEsperado) {
+                    $avisoItems = ' [⚠ esperados ' . $taEsperado . ', encontrados ' . count($uniqueRows) . ']';
+                }
+
+                // ── Datos del colegio (del primer ítem) ──
+                $cat       = $get($baseRow, 'categoria');
+                $colegio   = tp_colegio($cat);
                 $colegioId = null;
                 if ($colegio) {
                     $st = $db->prepare("SELECT id FROM colegios WHERE activo=1 AND nombre LIKE ? LIMIT 1");
@@ -179,45 +220,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     $colegioId = $st->fetchColumn() ?: null;
                 }
 
-                // Estado interno según la clasificación
+                // ── kit_nombre legacy para tienda_pedidos ──
+                if ($isMulti) {
+                    $kitNombresArr   = array_map(fn($r) => $get($r, 'kit'), $uniqueRows);
+                    $kitNombreLegacy = count($uniqueRows) . ' productos: '
+                                     . implode(' + ', array_slice($kitNombresArr, 0, 2))
+                                     . (count($kitNombresArr) > 2 ? ' ...' : '');
+                    $cantidadLegacy  = array_sum(array_map(fn($r) => max(1, (int)$get($r, 'cantidad')), $uniqueRows));
+                } else {
+                    $kitNombreLegacy = $get($baseRow, 'kit');
+                    $cantidadLegacy  = max(1, (int)$get($baseRow, 'cantidad'));
+                }
+
                 $estadoInterno = ($accion === 'historico') ? 'entregado' : 'pendiente';
 
+                // ── Construir $data para INSERT tienda_pedidos ──
                 $data = [
                     'woo_order_id'    => $wooId,
                     'estado'          => $estadoInterno,
-                    'cliente_nombre'  => $fila['nombre'],
-                    'cliente_telefono'=> $get($cols, 'telefono'),
-                    'cliente_email'   => $get($cols, 'email'),
-                    'direccion'       => $get($cols, 'dir'),
-                    'ciudad'          => $get($cols, 'ciudad'),
+                    'cliente_nombre'  => $nombre,
+                    'cliente_telefono'=> $get($baseRow, 'telefono'),
+                    'cliente_email'   => $get($baseRow, 'email'),
+                    'direccion'       => $get($baseRow, 'dir'),
+                    'ciudad'          => $get($baseRow, 'ciudad'),
                     'colegio_nombre'  => $colegio,
                     'colegio_id'      => $colegioId,
-                    'kit_nombre'      => $get($cols, 'kit'),
+                    'kit_nombre'      => $kitNombreLegacy,
                     'categoria'       => $cat,
-                    'fecha_compra'    => tp_fecha_iso($get($cols, 'fecha')),
+                    'fecha_compra'    => tp_fecha_iso($get($baseRow, 'fecha')),
                     'creado_desde_csv'=> 1,
                 ];
+                if ($colWooStatus) $data['woo_status'] = $estWoo ?: null;
+                if ($colCantidad)  $data['cantidad']   = $cantidadLegacy;
+                if ($colInstruc)   $data['instrucciones_especiales'] = $get($baseRow, 'instruc') ?: null;
+                if ($colWooTotal && $wooTotal > 0) $data['woo_total'] = $wooTotal;
 
-                if ($colWooStatus) {
-                    $data['woo_status'] = $estWoo ?: null;
-                }
-                if ($colCantidad) {
-                    $cant = (int)$get($cols, 'cantidad');
-                    $data['cantidad'] = $cant > 0 ? $cant : 1;
-                }
-                if ($colInstruc) {
-                    $data['instrucciones_especiales'] = $get($cols, 'instruc') ?: null;
-                }
-
-                // ── INSERT ──
+                // ── INSERT tienda_pedidos ──
                 $placeholders = ':' . implode(', :', array_keys($data));
                 $colNames     = implode(', ', array_keys($data));
-                $db->prepare("INSERT INTO tienda_pedidos ($colNames) VALUES ($placeholders)")
-                   ->execute($data);
-
+                $db->prepare("INSERT INTO tienda_pedidos ($colNames) VALUES ($placeholders)")->execute($data);
                 $newId = (int)$db->lastInsertId();
 
-                // Historial inicial
+                // ── Historial inicial ──
                 $notaHistorial = match($accion) {
                     'pendiente'       => 'Importado desde CSV (procesando)',
                     'auto_produccion' => 'Importado desde CSV (recibido)',
@@ -229,7 +273,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     VALUES (?, NULL, ?, ?, ?)")
                    ->execute([$newId, $estadoInterno, $notaHistorial, $usuarioId]);
 
-                // ── Auto-aprobación para estado "recibido" ──
+                // ── INSERT en tienda_pedido_items ──
+                if ($tblItemsOk) {
+                    foreach ($uniqueRows as $row) {
+                        $linea      = (float)$get($row, 'precio_linea');
+                        $qty        = max(1, (int)$get($row, 'cantidad'));
+                        $precioUnit = $qty > 0 ? round($linea / $qty, 2) : $linea;
+                        $rowCat     = $get($row, 'categoria');
+                        $rowColegio = tp_colegio($rowCat);
+                        $rowColId   = null;
+                        if ($rowColegio) {
+                            $st2 = $db->prepare("SELECT id FROM colegios WHERE activo=1 AND nombre LIKE ? LIMIT 1");
+                            $st2->execute(['%' . $rowColegio . '%']);
+                            $rowColId = $st2->fetchColumn() ?: null;
+                        }
+                        $db->prepare("INSERT INTO tienda_pedido_items
+                            (pedido_id, kit_nombre, colegio_id, colegio_nombre, cantidad, precio_unit, subtotal)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)")
+                           ->execute([$newId, $get($row, 'kit'), $rowColId, $rowColegio, $qty, $precioUnit, $linea]);
+                    }
+                }
+
+                // ── Auto-aprobación para "recibido" ──
                 if ($accion === 'auto_produccion') {
                     $sets   = "estado='aprobado', updated_at=NOW()";
                     $params = ['id' => $newId];
@@ -238,54 +303,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                         $params['ap'] = $usuarioId;
                     }
                     $db->prepare("UPDATE tienda_pedidos SET $sets WHERE id=:id")->execute($params);
-
                     $db->prepare("INSERT INTO tienda_pedidos_historial
                         (pedido_id, estado_ant, estado_nuevo, nota, usuario_id)
                         VALUES (?, 'pendiente', 'aprobado', 'Auto-aprobado al importar (recibido en WooCommerce)', ?)")
                        ->execute([$newId, $usuarioId]);
 
-                    // Crear solicitud de producción
-                    $fechaCompra = tp_fecha_iso($get($cols, 'fecha'));
+                    $fechaCompra = tp_fecha_iso($get($baseRow, 'fecha'));
                     $dias = 0;
-                    try {
-                        $dias = (new DateTime($fechaCompra))->diff(new DateTime('today'))->days;
-                    } catch (Exception $e) {}
+                    try { $dias = (new DateTime($fechaCompra))->diff(new DateTime('today'))->days; } catch (Exception $e) {}
 
                     $solicitudTablaExiste = $db->query("SHOW TABLES LIKE 'solicitudes_produccion'")->fetchColumn();
                     if ($solicitudTablaExiste) {
-                        crearSolicitudProduccion($db, [
-                            'fuente'        => 'tienda',
-                            'titulo'        => ($data['kit_nombre'] ?? 'Pedido sin kit'),
-                            'tipo'          => 'armar_kit',
-                            'kit_nombre'    => $data['kit_nombre'] ?? null,
-                            'cantidad'      => (int)($data['cantidad'] ?? 1),
-                            'prioridad'     => $dias > 7 ? 1 : ($dias > 5 ? 2 : 3),
-                            'fecha_limite'  => null,
-                            'usuario_id'    => $usuarioId,
-                            'pedido_id'     => $newId,
-                            'colegio_id'    => $colegioId,
-                            'notas'         => null,
-                            'historial_nota'=> 'Auto-aprobado al importar CSV (recibido en WooCommerce)',
-                        ]);
+                        foreach ($uniqueRows as $row) {
+                            $qty = max(1, (int)$get($row, 'cantidad'));
+                            crearSolicitudProduccion($db, [
+                                'fuente'        => 'tienda',
+                                'titulo'        => $get($row, 'kit') ?: 'Pedido sin kit',
+                                'tipo'          => 'armar_kit',
+                                'kit_nombre'    => $get($row, 'kit') ?: null,
+                                'cantidad'      => $qty,
+                                'prioridad'     => $dias > 7 ? 1 : ($dias > 5 ? 2 : 3),
+                                'fecha_limite'  => null,
+                                'usuario_id'    => $usuarioId,
+                                'pedido_id'     => $newId,
+                                'colegio_id'    => $colegioId,
+                                'notas'         => null,
+                                'historial_nota'=> 'Auto-aprobado al importar CSV (recibido en WooCommerce)',
+                            ]);
+                        }
                     }
-
-                    $resumen['nuevos_recibido']++;
-                    $fila['resultado'] = 'importado_recibido';
-                    $fila['detalle']   = 'Auto-aprobado → En producción';
-
-                } elseif ($accion === 'historico') {
-                    $resumen['nuevos_historico']++;
-                    $fila['resultado'] = 'importado_historico';
-                    $fila['detalle']   = 'Registrado como historial';
-
-                } else {
-                    $resumen['nuevos_procesando']++;
-                    $fila['resultado'] = 'importado_procesando';
-                    $fila['detalle']   = 'Pendiente de aprobación';
                 }
 
-                // Registrar para evitar procesar otra fila del mismo pedido en este CSV
-                $existentes_csv[$wooId] = true;
+                // ── Contadores y resultado ──
+                $precioStr = $wooTotal > 0 ? ' · $' . number_format($wooTotal, 0, ',', '.') : '';
+                if ($isMulti) {
+                    $resumen['nuevos_multi']++;
+                    $kitListStr = implode(' + ', array_map(fn($r) => $get($r, 'kit'), $uniqueRows));
+                    if ($accion === 'auto_produccion') {
+                        $resumen['nuevos_recibido']++;
+                        $fila['resultado'] = 'importado_multi_recibido';
+                        $fila['detalle']   = count($uniqueRows) . ' productos: ' . $kitListStr . $precioStr . $avisoItems . ' → Auto-aprobado';
+                    } elseif ($accion === 'historico') {
+                        $resumen['nuevos_historico']++;
+                        $fila['resultado'] = 'importado_multi_historico';
+                        $fila['detalle']   = count($uniqueRows) . ' productos: ' . $kitListStr . $precioStr . $avisoItems;
+                    } else {
+                        $resumen['nuevos_procesando']++;
+                        $fila['resultado'] = 'importado_multi';
+                        $fila['detalle']   = count($uniqueRows) . ' productos: ' . $kitListStr . $precioStr . $avisoItems;
+                    }
+                } else {
+                    if ($accion === 'auto_produccion') {
+                        $resumen['nuevos_recibido']++;
+                        $fila['resultado'] = 'importado_recibido';
+                        $fila['detalle']   = 'Auto-aprobado → En producción' . $precioStr . $avisoItems;
+                    } elseif ($accion === 'historico') {
+                        $resumen['nuevos_historico']++;
+                        $fila['resultado'] = 'importado_historico';
+                        $fila['detalle']   = 'Registrado como historial' . $precioStr . $avisoItems;
+                    } else {
+                        $resumen['nuevos_procesando']++;
+                        $fila['resultado'] = 'importado_procesando';
+                        $fila['detalle']   = 'Pendiente de aprobación' . $precioStr . $avisoItems;
+                    }
+                }
 
             } catch (Exception $e) {
                 $fila['resultado'] = 'error';
@@ -363,6 +444,12 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   </div>
   <div class="col-6 col-md-2">
     <div class="section-card text-center py-3">
+      <div class="fs-3 fw-bold" style="color:#7c3aed"><?= $resumen['nuevos_multi'] ?></div>
+      <div class="small text-muted">Multi-producto<br><span style="font-size:.7rem">(incluidos arriba)</span></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="section-card text-center py-3">
       <div class="fs-3 fw-bold text-secondary"><?= $resumen['omitidos'] ?></div>
       <div class="small text-muted">Ya existían<br><span style="font-size:.7rem">(skip)</span></div>
     </div>
@@ -395,6 +482,9 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <button type="button" class="btn btn-outline-success"           data-filtro="importado_historico">Entregado</button>
       <button type="button" class="btn btn-outline-secondary"         data-filtro="ya_existe">Ya existían</button>
       <button type="button" class="btn btn-outline-secondary"         data-filtro="saltado" style="color:#94a3b8">Saltados</button>
+      <?php if ($resumen['nuevos_multi']): ?>
+      <button type="button" class="btn btn-outline-secondary"         data-filtro="importado_multi" style="color:#7c3aed">Multi</button>
+      <?php endif; ?>
       <?php if ($resumen['errores']): ?>
       <button type="button" class="btn btn-outline-danger"            data-filtro="error">Errores</button>
       <?php endif; ?>
@@ -414,13 +504,16 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <tbody id="tablaResultado">
         <?php foreach ($resumen['filas'] as $f):
           $badge = match($f['resultado']) {
-            'importado_procesando' => ['warning',   'Pendiente'],
-            'importado_recibido'   => ['primary',   'En producción'],
-            'importado_historico'  => ['success',   'Histórico'],
-            'ya_existe'            => ['secondary', 'Ya existía'],
-            'saltado'              => ['light',     'Saltado'],
-            'error'                => ['danger',    'Error'],
-            default                => ['light',     $f['resultado']],
+            'importado_procesando'       => ['warning',   'Pendiente'],
+            'importado_recibido'         => ['primary',   'En producción'],
+            'importado_historico'        => ['success',   'Histórico'],
+            'importado_multi'            => ['warning',   'Multi · Pendiente'],
+            'importado_multi_recibido'   => ['primary',   'Multi · Producción'],
+            'importado_multi_historico'  => ['success',   'Multi · Histórico'],
+            'ya_existe'                  => ['secondary', 'Ya existía'],
+            'saltado'                    => ['light',     'Saltado'],
+            'error'                      => ['danger',    'Error'],
+            default                      => ['light',     $f['resultado']],
           };
         ?>
         <tr data-resultado="<?= $f['resultado'] ?>">
@@ -438,7 +531,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <?php endif; ?>
 
 <?php
-  $totalImportados = $resumen['nuevos_procesando'] + $resumen['nuevos_recibido'] + $resumen['nuevos_historico'];
+  $totalImportados = $resumen['nuevos_procesando'] + $resumen['nuevos_recibido'] + $resumen['nuevos_historico']; // nuevos_multi ya está incluido en estos
 ?>
 <?php if ($totalImportados > 0): ?>
   <div class="text-center mt-3">
@@ -457,7 +550,12 @@ document.querySelectorAll('#filtroTabla button').forEach(btn => {
     this.classList.add('active');
     const filtro = this.dataset.filtro;
     document.querySelectorAll('#tablaResultado tr').forEach(tr => {
-      tr.style.display = (!filtro || tr.dataset.resultado === filtro) ? '' : 'none';
+      const res = tr.dataset.resultado;
+      // El filtro "importado_multi" muestra las 3 variantes multi
+      const match = !filtro
+        || res === filtro
+        || (filtro === 'importado_multi' && res.startsWith('importado_multi'));
+      tr.style.display = match ? '' : 'none';
     });
   });
 });
