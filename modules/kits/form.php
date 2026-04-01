@@ -59,14 +59,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $linkColegioId = $data['colegio_id'] ?? null;
         $linkGrado     = $data['grado']     ?? null;
 
+        // Helper: vincular kit a curso activo, creándolo si no existe
+        $vincularKitCurso = function(int $kitId, $colId, ?string $grado) use ($db): void {
+            if (!$colId || !$grado) return;
+            $stmt = $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=? AND activo=1");
+            $stmt->execute([$kitId, $colId, $grado]);
+            if ($stmt->rowCount() === 0) {
+                $nivelMap = [
+                    'transicion'=>'preescolar','1'=>'primaria','2'=>'primaria','3'=>'primaria','4'=>'primaria','5'=>'primaria',
+                    '6'=>'secundaria','7'=>'secundaria','8'=>'secundaria','9'=>'secundaria','10'=>'media','11'=>'media',
+                ];
+                $labelMap = [
+                    'transicion'=>'Transición','1'=>'1°','2'=>'2°','3'=>'3°','4'=>'4°','5'=>'5°',
+                    '6'=>'6°','7'=>'7°','8'=>'8°','9'=>'9°','10'=>'10°','11'=>'11°',
+                ];
+                $nombre = $labelMap[$grado] ?? "Grado $grado";
+                $nivel  = $nivelMap[$grado] ?? 'otro';
+                $db->prepare("INSERT INTO cursos (colegio_id, nombre, grado, nivel, activo, anio, kit_id) VALUES (?,?,?,?,1,?,?)")
+                   ->execute([$colId, $nombre, $grado, $nivel, (int)date('Y'), $kitId]);
+            }
+        };
+
         if ($kit) {
+            $kitAntes = $kit;
             $sets = implode(',', array_map(fn($k)=>"$k=:$k", array_keys($data)));
             $data['id'] = $id;
             $db->prepare("UPDATE kits SET $sets WHERE id=:id")->execute($data);
-            if ($linkColegioId && $linkGrado) {
-                $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=?")
-                   ->execute([$id, $linkColegioId, $linkGrado]);
-            }
+            $vincularKitCurso($id, $linkColegioId, $linkGrado);
+            auditoria('editar_kit','kits',$id, $kitAntes, $data);
             $success = 'Kit actualizado.';
             $kit = $db->query("SELECT * FROM kits WHERE id=$id")->fetch();
         } else {
@@ -83,10 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $vals = ':' . implode(',:', array_keys($data));
             $db->prepare("INSERT INTO kits ($cols) VALUES ($vals)")->execute($data);
             $newId = $db->lastInsertId();
-            if ($linkColegioId && $linkGrado) {
-                $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=?")
-                   ->execute([$newId, $linkColegioId, $linkGrado]);
-            }
+            $vincularKitCurso($newId, $linkColegioId, $linkGrado);
+            auditoria('crear_kit','kits',$newId, [], $data);
             header('Location: ' . APP_URL . '/modules/kits/form.php?id=' . $newId . '&ok=1'); exit;
         }
     } catch (Exception $e) { $error = $e->getMessage(); }

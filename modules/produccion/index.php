@@ -67,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cambiar_est
                 'en_proceso' => 'en_produccion',
                 'listo'      => 'listo_produccion',
                 'pendiente'  => 'aprobado',
+                'rechazado'  => 'pendiente',
                 default      => null,
             };
             if ($estadoTienda) {

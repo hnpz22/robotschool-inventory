@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st = $db->prepare("UPDATE elementos SET $sets WHERE id=:id");
             $data['id'] = $id;
             $st->execute($data);
-            auditoria('editar_elemento','elementos',$id);
+            auditoria('editar_elemento','elementos',$id, $elem, $data);
             $success = 'Elemento actualizado correctamente.';
             $elem = $db->query("SELECT * FROM elementos WHERE id=$id")->fetch();
         } else {
@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vals = ':' . implode(',:', array_keys($data));
             $db->prepare("INSERT INTO elementos ($cols) VALUES ($vals)")->execute($data);
             $newId = $db->lastInsertId();
-            auditoria('crear_elemento','elementos',$newId);
+            auditoria('crear_elemento','elementos',$newId, [], $data);
             header('Location: ' . APP_URL . '/modules/elementos/form.php?id=' . $newId . '&ok=1');
             exit;
         }

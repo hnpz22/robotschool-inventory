@@ -23,6 +23,7 @@ $ESTADOS = [
     'en_produccion'   => ['label'=>'En producci&oacute;n','bg'=>'#ffedd5', 'txt'=>'#9a3412'],
     'listo_produccion'=> ['label'=>'Listo producci&oacute;n','bg'=>'#d1fae5','txt'=>'#065f46'],
     'en_alistamiento' => ['label'=>'En alistamiento',     'bg'=>'#ede9fe', 'txt'=>'#5b21b6'],
+    'listo_envio'     => ['label'=>'Listo para env&iacute;o', 'bg'=>'#cffafe', 'txt'=>'#155e75'],
     'despachado'      => ['label'=>'Despachado',          'bg'=>'#bbf7d0', 'txt'=>'#14532d'],
     'entregado'       => ['label'=>'Entregado',           'bg'=>'#f1f5f9', 'txt'=>'#475569'],
     'cancelado'       => ['label'=>'Cancelado',           'bg'=>'#fee2e2', 'txt'=>'#991b1b'],

@@ -435,7 +435,7 @@ if ($woo->isConfigured()) {
 
 **Flujo:** `sincronizar()` → `procesarPedido()` → escribe en `tienda_pedidos` + `tienda_pedidos_historial` + intenta cruzar colegio por nombre aproximado.
 
-**Bug conocido:** La clase actualmente escribe en `woo_pedidos` (tabla que no existe en el seed). Ver Bug 4 en sección anterior.
+**Nota:** La clase fue actualizada en v3.4 para escribir en `tienda_pedidos` y `tienda_pedidos_historial`.
 
 ### Microsoft OAuth 2.0
 
