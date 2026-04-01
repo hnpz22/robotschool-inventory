@@ -195,13 +195,18 @@ function crearSolicitudProduccion(PDO $db, array $datos): int {
     if ($colColId)  { $campos[] = 'colegio_id';  $vals[] = $datos['colegio_id']  ?? null; }
 
     $ph = implode(',', array_fill(0, count($campos), '?'));
-    $db->prepare("INSERT INTO solicitudes_produccion (".implode(',',$campos).") VALUES ($ph)")
-       ->execute($vals);
-    $sid = (int)$db->lastInsertId();
+    try {
+        $db->prepare("INSERT INTO solicitudes_produccion (".implode(',',$campos).") VALUES ($ph)")
+           ->execute($vals);
+        $sid = (int)$db->lastInsertId();
 
-    if ($db->query("SHOW TABLES LIKE 'solicitud_historial'")->fetchColumn()) {
-        $db->prepare("INSERT INTO solicitud_historial (solicitud_id,estado,usuario_id,comentario) VALUES (?,?,?,?)")
-           ->execute([$sid,'pendiente',$datos['usuario_id']??null,$datos['historial_nota']??'Creado automáticamente']);
+        if ($db->query("SHOW TABLES LIKE 'solicitud_historial'")->fetchColumn()) {
+            $db->prepare("INSERT INTO solicitud_historial (solicitud_id,estado,usuario_id,comentario) VALUES (?,?,?,?)")
+               ->execute([$sid,'pendiente',$datos['usuario_id']??null,$datos['historial_nota']??'Creado automáticamente']);
+        }
+    } catch (Exception $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
     }
     return $sid;
 }

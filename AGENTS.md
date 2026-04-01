@@ -252,6 +252,8 @@ v_tienda_pedidos     — pedidos tienda con datos del cliente
 v_colegios           — colegios con conteo de cursos
 ```
 
+**Nota de trazabilidad:** `tienda_pedidos_historial` y `auditoria` son escritas exclusivamente por la capa PHP — no hay triggers MySQL. UPDATEs directos a `tienda_pedidos.estado` desde SQL (migraciones, fixes manuales) no quedan registrados en el historial. Siempre usar los módulos PHP para cambios de estado en producción.
+
 ---
 
 ## Convenciones de nombres
