@@ -78,6 +78,18 @@ $historial = $db->query("
 
 $usuarios = $db->query("SELECT id,nombre FROM usuarios WHERE activo=1 ORDER BY nombre")->fetchAll();
 
+// Multi-item: check if tienda_pedido_items table exists and load rows
+$tblItemsOk = (bool) $db->query(
+    "SELECT COUNT(*) FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedido_items'"
+)->fetchColumn();
+$pedidoItems = [];
+if ($tblItemsOk) {
+    $stmtItems = $db->prepare("SELECT * FROM tienda_pedido_items WHERE pedido_id=? ORDER BY id");
+    $stmtItems->execute([$id]);
+    $pedidoItems = $stmtItems->fetchAll();
+}
+
 $semCol=['rojo'=>'#ef4444','amarillo'=>'#f59e0b','verde'=>'#22c55e','completado'=>'#94a3b8'];
 $sc  = $semCol[$pedido['semaforo']] ?? '#ccc';
 $est = $ESTADOS[$pedido['estado']] ?? ['label'=>$pedido['estado'],'bg'=>'#f1f5f9','txt'=>'#475569'];
@@ -155,17 +167,52 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <?php endif; ?>
     </div>
 
-    <!-- 3. Producto -->
+    <!-- 3. Producto(s) -->
     <div class="section-card">
-      <h6 class="fw-bold mb-2"><i class="bi bi-box-seam me-2 text-warning"></i>Producto</h6>
-      <div class="fw-semibold"><?= htmlspecialchars($pedido['kit_nombre'] ?? '&mdash;') ?></div>
-      <?php $cant = (int)($pedido['cantidad'] ?? 1); ?>
-      <div class="text-muted small">
-        <?= htmlspecialchars($pedido['categoria'] ?? '') ?>
-        <?php if ($cant > 0): ?>
-          <span class="badge bg-secondary ms-1"><?= $cant ?> <?= $cant === 1 ? 'unidad' : 'unidades' ?></span>
-        <?php endif; ?>
-      </div>
+      <h6 class="fw-bold mb-2"><i class="bi bi-box-seam me-2 text-warning"></i>Producto<?= count($pedidoItems) > 1 ? 's' : '' ?></h6>
+      <?php if (!empty($pedidoItems)): ?>
+        <table class="table table-sm table-borderless mb-0" style="font-size:.82rem">
+          <thead>
+            <tr class="text-muted" style="border-bottom:1px solid #e2e8f0">
+              <th class="ps-0">Kit</th>
+              <th>Colegio</th>
+              <th class="text-center">Cant.</th>
+              <th class="text-end pe-0">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($pedidoItems as $item): ?>
+            <tr>
+              <td class="ps-0 fw-semibold"><?= htmlspecialchars($item['kit_nombre']) ?></td>
+              <td class="text-muted"><?= htmlspecialchars($item['colegio_nombre'] ?? '—') ?></td>
+              <td class="text-center"><?= (int)$item['cantidad'] ?></td>
+              <td class="text-end pe-0">$<?= number_format((float)$item['subtotal'], 0, ',', '.') ?></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+          <?php
+            $grandTotal = array_sum(array_column($pedidoItems, 'subtotal'));
+          ?>
+          <tfoot>
+            <tr style="border-top:1px solid #e2e8f0">
+              <td colspan="3" class="ps-0 fw-bold text-end pe-2">Total</td>
+              <td class="text-end pe-0 fw-bold text-primary">$<?= number_format($grandTotal, 0, ',', '.') ?></td>
+            </tr>
+          </tfoot>
+        </table>
+      <?php else: ?>
+        <div class="fw-semibold"><?= htmlspecialchars($pedido['kit_nombre'] ?? '&mdash;') ?></div>
+        <?php $cant = (int)($pedido['cantidad'] ?? 1); ?>
+        <div class="text-muted small">
+          <?= htmlspecialchars($pedido['categoria'] ?? '') ?>
+          <?php if ($cant > 0): ?>
+            <span class="badge bg-secondary ms-1"><?= $cant ?> <?= $cant === 1 ? 'unidad' : 'unidades' ?></span>
+          <?php endif; ?>
+          <?php if (($pedido['total'] ?? 0) > 0): ?>
+            <span class="ms-2 fw-semibold text-primary">$<?= number_format((float)$pedido['total'], 0, ',', '.') ?></span>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
     </div>
 
     <!-- 4. Asignación y Notas -->

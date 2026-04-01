@@ -48,12 +48,7 @@ $colWooTotal        = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMN
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Auth::csrfVerify($_POST['csrf'] ?? '')) die('CSRF');
 
-    $kitId         = (int)($_POST['kit_id'] ?? 0);
-    $colegioId     = (int)($_POST['colegio_id'] ?? 0);
-    $cursoId       = (int)($_POST['curso_id'] ?? 0);
-    $cantidad      = max(1, (int)($_POST['cantidad'] ?? 1));
-    $precioUnit    = (float)str_replace(['.', ','], ['', '.'], $_POST['precio_unitario'] ?? '0');
-    $total         = (float)str_replace(['.', ','], ['', '.'], $_POST['total'] ?? '0');
+    $rawItems      = $_POST['items'] ?? [];
     $clienteNombre = trim($_POST['cliente_nombre'] ?? '');
     $clienteTel    = trim($_POST['cliente_telefono'] ?? '');
     $clienteEmail  = trim($_POST['cliente_email'] ?? '');
@@ -65,40 +60,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ? $_POST['tipo_entrega'] : 'envio';
     $sedeRecogida  = $tipoEntrega === 'recogida_local'
                         ? trim($_POST['sede_recogida'] ?? '') : '';
-    // Estado de pago: 'pendiente' = pendiente de pago, 'aprobado' = pago confirmado → va a producción
     $estadoPago    = in_array($_POST['estado_pago'] ?? '', ['pendiente','aprobado'])
                         ? $_POST['estado_pago'] : 'pendiente';
 
     try {
         if (!$clienteNombre) throw new Exception('El nombre del cliente es requerido.');
-        if (!$kitId)         throw new Exception('Selecciona un kit.');
+        if (empty($rawItems)) throw new Exception('Agrega al menos un producto a la orden.');
         if (!$metodoPago)    throw new Exception('Selecciona el método de pago.');
         if ($tipoEntrega === 'recogida_local' && !$sedeRecogida)
             throw new Exception('Selecciona la sede de recogida.');
 
-        // Datos del kit
-        $kitRow = $db->prepare("SELECT nombre, precio_cop FROM kits WHERE id=? AND activo=1");
-        $kitRow->execute([$kitId]);
-        $kit = $kitRow->fetch(PDO::FETCH_ASSOC);
-        if (!$kit) throw new Exception('Kit no encontrado o inactivo.');
-        $kitNombre = $kit['nombre'];
+        // ── Validar y normalizar ítems ──────────────────────────────
+        $parsedItems = [];
+        foreach ($rawItems as $item) {
+            $kitId = (int)($item['kit_id'] ?? 0);
+            if (!$kitId) continue; // ignorar filas vacías
+            $cantidad   = max(1, (int)($item['cantidad'] ?? 1));
+            $precioUnit = (float)str_replace(['.', ','], ['', '.'], $item['precio_unit'] ?? '0');
+            $colId      = (int)($item['colegio_id'] ?? 0);
+            $cursoId    = (int)($item['curso_id']   ?? 0);
 
-        // Nombre del colegio
-        $colegioNombre = null;
-        if ($colegioId) {
-            $colegioNombre = $db->prepare("SELECT nombre FROM colegios WHERE id=?");
-            $colegioNombre->execute([$colegioId]);
-            $colegioNombre = $colegioNombre->fetchColumn() ?: null;
+            $stKit = $db->prepare("SELECT nombre FROM kits WHERE id=? AND activo=1");
+            $stKit->execute([$kitId]);
+            $kitRow = $stKit->fetch(PDO::FETCH_ASSOC);
+            if (!$kitRow) throw new Exception("Kit ID $kitId no encontrado o inactivo.");
+
+            $colNombre = null;
+            if ($colId) {
+                $stCol = $db->prepare("SELECT nombre FROM colegios WHERE id=?");
+                $stCol->execute([$colId]);
+                $colNombre = $stCol->fetchColumn() ?: null;
+            }
+
+            $parsedItems[] = [
+                'kit_id'         => $kitId,
+                'kit_nombre'     => $kitRow['nombre'],
+                'colegio_id'     => $colId   ?: null,
+                'colegio_nombre' => $colNombre,
+                'curso_id'       => $cursoId ?: null,
+                'cantidad'       => $cantidad,
+                'precio_unit'    => $precioUnit,
+                'subtotal'       => round($precioUnit * $cantidad, 2),
+            ];
         }
+        if (empty($parsedItems)) throw new Exception('Agrega al menos un producto válido.');
+
+        $grandTotal    = array_sum(array_column($parsedItems, 'subtotal'));
+        $totalCantidad = array_sum(array_column($parsedItems, 'cantidad'));
+
+        // Campos legacy de tienda_pedidos (compatibilidad con resto del sistema)
+        $primerItem   = $parsedItems[0];
+        $kitNombreRes = count($parsedItems) === 1
+            ? $primerItem['kit_nombre']
+            : count($parsedItems) . ' productos';
+        $colIdRes     = count($parsedItems) === 1 ? ($primerItem['colegio_id']     ?? null) : null;
+        $colNomRes    = count($parsedItems) === 1 ? ($primerItem['colegio_nombre'] ?? null) : null;
 
         $db->beginTransaction();
 
-        // Dirección: vacía si es recogida local
         $dirGuardar    = $tipoEntrega === 'envio' ? ($direccion ?: null) : null;
         $ciudadGuardar = $tipoEntrega === 'envio' ? ($ciudad    ?: null) : null;
-
-        // Insertar con woo_order_id temporal único
-        // Se construye dinámicamente para columnas que pueden no existir aún en la BD
         $tmpId = 'MAN-TMP-' . bin2hex(random_bytes(5));
 
         $insertCols   = ['woo_order_id','estado','cliente_nombre','cliente_telefono','cliente_email',
@@ -107,8 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          'creado_desde_csv','created_at','updated_at'];
         $insertVals   = ['?',"'pendiente'",'?','?','?','?','?','?','?','?','?','CURDATE()','?','0','NOW()','NOW()'];
         $insertParams = [$tmpId, $clienteNombre, $clienteTel ?: null, $clienteEmail ?: null,
-                         $dirGuardar, $ciudadGuardar, $colegioNombre, $colegioId ?: null,
-                         $kitNombre, $cantidad, $notas ?: null];
+                         $dirGuardar, $ciudadGuardar, $colNomRes, $colIdRes,
+                         $kitNombreRes, $totalCantidad, $notas ?: null];
 
         if ($colWooPayment) {
             $insertCols[]   = 'woo_payment_method';
@@ -118,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($colWooTotal) {
             $insertCols[]   = 'woo_total';
             $insertVals[]   = '?';
-            $insertParams[] = $total > 0 ? $total : null;
+            $insertParams[] = $grandTotal > 0 ? $grandTotal : null;
         }
 
         $sql = 'INSERT INTO tienda_pedidos (' . implode(',', $insertCols) . ') VALUES (' . implode(',', $insertVals) . ')';
@@ -127,11 +148,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newId   = (int)$db->lastInsertId();
         $ordenId = 'MAN-' . $newId;
 
-        // Actualizar con el ID definitivo
         $db->prepare("UPDATE tienda_pedidos SET woo_order_id=?, numero_pedido=? WHERE id=?")
            ->execute([$ordenId, $ordenId, $newId]);
 
-        // Guardar tipo de entrega en columnas si existen
         if ($colTipoDespacho) {
             $sqlTipo = "UPDATE tienda_pedidos SET tipo_despacho=?"
                 . ($colSedeRecogida ? ", sede_recogida=?" : "")
@@ -142,51 +161,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare($sqlTipo)->execute($params);
         }
 
-        // Nota de entrega para historial
-        $notaEntrega = $tipoEntrega === 'recogida_local'
+        // ── Insertar ítems (migration_v3.6.sql) ────────────────────
+        $tblItemsOk = $db->query("SELECT COUNT(*) FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedido_items'")->fetchColumn();
+        if ($tblItemsOk) {
+            $stItem = $db->prepare("INSERT INTO tienda_pedido_items
+                (pedido_id,kit_id,kit_nombre,colegio_id,colegio_nombre,curso_id,cantidad,precio_unit,subtotal)
+                VALUES (?,?,?,?,?,?,?,?,?)");
+            foreach ($parsedItems as $it) {
+                $stItem->execute([
+                    $newId, $it['kit_id'], $it['kit_nombre'],
+                    $it['colegio_id'], $it['colegio_nombre'], $it['curso_id'],
+                    $it['cantidad'], $it['precio_unit'], $it['subtotal'],
+                ]);
+            }
+        }
+
+        // ── Historial ───────────────────────────────────────────────
+        $notaEntrega  = $tipoEntrega === 'recogida_local'
             ? 'Recogida local — ' . $sedeRecogida
             : ($dirGuardar ? 'Envío a ' . $dirGuardar . ($ciudadGuardar ? ', ' . $ciudadGuardar : '') : 'Envío');
-
-        // Historial: creación
-        $metodoLabel = $METODOS_PAGO[$metodoPago]['label'] ?? $metodoPago;
+        $metodoLabel  = $METODOS_PAGO[$metodoPago]['label'] ?? $metodoPago;
         $notaCreacion = 'Pedido manual — ' . $metodoLabel . ' — ' . $notaEntrega;
         $db->prepare("INSERT INTO tienda_pedidos_historial
             (pedido_id, estado_ant, estado_nuevo, nota, usuario_id) VALUES (?,NULL,'pendiente',?,?)")
            ->execute([$newId, $notaCreacion, $userId]);
 
-        // Aprobación inmediata (pago confirmado)
+        // ── Aprobación inmediata ────────────────────────────────────
         if ($estadoPago === 'aprobado') {
             $db->prepare("UPDATE tienda_pedidos
                 SET estado='aprobado', aprobado_por=?, aprobado_at=NOW(), updated_at=NOW()
                 WHERE id=?")
                ->execute([$userId, $newId]);
-
             $db->prepare("INSERT INTO tienda_pedidos_historial
                 (pedido_id, estado_ant, estado_nuevo, nota, usuario_id)
                 VALUES (?,'pendiente','aprobado','Aprobado al crear — pago confirmado en tienda',?)")
                ->execute([$newId, $userId]);
 
-            crearSolicitudProduccion($db, [
-                'pedido_id'      => $newId,
-                'kit_nombre'     => $kitNombre,
-                'cantidad'       => $cantidad,
-                'usuario_id'     => $userId,
-                'colegio_id'     => $colegioId ?: null,
-                'fuente'         => 'tienda',
-                'titulo'         => "$kitNombre × $cantidad — $ordenId",
-                'historial_nota' => 'Creado desde pedido manual en tienda',
-            ]);
+            foreach ($parsedItems as $it) {
+                crearSolicitudProduccion($db, [
+                    'pedido_id'      => $newId,
+                    'kit_nombre'     => $it['kit_nombre'],
+                    'cantidad'       => $it['cantidad'],
+                    'usuario_id'     => $userId,
+                    'colegio_id'     => $it['colegio_id'],
+                    'fuente'         => 'tienda',
+                    'titulo'         => $it['kit_nombre'] . ' × ' . $it['cantidad'] . ' — ' . $ordenId,
+                    'historial_nota' => 'Creado desde pedido manual en tienda',
+                ]);
+            }
         }
 
         $db->commit();
         auditoria('crear_pedido_manual', 'tienda_pedidos', $newId, [], [
             'orden'         => $ordenId,
-            'kit'           => $kitNombre,
+            'items'         => count($parsedItems),
             'cliente'       => $clienteNombre,
             'metodo_pago'   => $metodoPago,
             'tipo_entrega'  => $tipoEntrega,
             'sede_recogida' => $sedeRecogida ?: null,
-            'total'         => $total,
+            'total'         => $grandTotal,
             'estado'        => $estadoPago,
         ]);
 
@@ -247,12 +281,10 @@ foreach ($kitsRaw as $k) {
 }
 
 // Valores del POST para repoblar en caso de error
-$postColegioId = (int)($_POST['colegio_id'] ?? 0);
-$postCursoId   = (int)($_POST['curso_id']   ?? 0);
-$postKitId     = (int)($_POST['kit_id']     ?? 0);
-$postMetodo    = $_POST['metodo_pago']  ?? '';
-$postEntrega   = $_POST['tipo_entrega'] ?? 'envio';
-$postEstado    = $_POST['estado_pago']  ?? 'pendiente';
+$postItems   = !empty($_POST['items']) ? $_POST['items'] : [[]];
+$postMetodo  = $_POST['metodo_pago']  ?? '';
+$postEntrega = $_POST['tipo_entrega'] ?? 'envio';
+$postEstado  = $_POST['estado_pago']  ?? 'pendiente';
 
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
@@ -328,93 +360,19 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       </div>
     </div>
 
-    <!-- 2. Producto: embudo colegio → curso → kit -->
+    <!-- 2. Productos (multi-ítem) -->
     <div class="form-section">
-      <div class="form-section-title">
-        <span class="paso-badge me-1">2</span> Producto
+      <div class="form-section-title d-flex justify-content-between align-items-center">
+        <span><span class="paso-badge me-1">2</span> Productos</span>
+        <span id="items-count-badge" class="badge bg-primary bg-opacity-10 text-primary" style="font-size:.7rem">0 ítems · $0</span>
       </div>
 
-      <!-- Paso A: Colegio -->
-      <div class="mb-3">
-        <label class="form-label small fw-semibold">
-          Colegio <span class="text-muted fw-normal">(filtra los cursos disponibles)</span>
-        </label>
-        <select name="colegio_id" id="sel-colegio" class="form-select"
-                onchange="onColegioChange(this.value)">
-          <option value="">— Seleccionar colegio —</option>
-          <?php foreach ($colegiosList as $col): ?>
-          <option value="<?= $col['id'] ?>"
-                  <?= $postColegioId == $col['id'] ? 'selected' : '' ?>>
-            <?= htmlspecialchars($col['nombre']) ?>
-          </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
+      <div id="items-container"></div>
 
-      <!-- Paso B: Curso/Grado (oculto hasta elegir colegio) -->
-      <div class="mb-3" id="bloque-curso" style="<?= $postColegioId ? '' : 'display:none' ?>">
-        <label class="form-label small fw-semibold">
-          Curso / Grado <span class="text-muted fw-normal">(asigna el kit del curso automáticamente)</span>
-        </label>
-        <select name="curso_id" id="sel-curso" class="form-select"
-                onchange="onCursoChange(this.value)">
-          <option value="">— Seleccionar curso —</option>
-        </select>
-      </div>
-
-      <!-- Paso C: Kit (se auto-selecciona del curso, o se elige manualmente) -->
-      <div class="mb-3" id="bloque-kit" style="<?= $postColegioId ? '' : 'display:none' ?>">
-        <label class="form-label small fw-semibold">
-          Kit <span class="text-danger">*</span>
-          <span class="text-muted fw-normal" id="kit-hint">(según el curso seleccionado)</span>
-        </label>
-        <select id="sel-kit" class="form-select"
-                onchange="onKitChange(this.value); document.getElementById('inp-kit-id').value=this.value;">
-          <option value="">— Seleccionar kit —</option>
-        </select>
-        <!-- Hidden: envía kit_id aunque el select esté disabled -->
-        <input type="hidden" name="kit_id" id="inp-kit-id" value="<?= $postKitId ?>">
-        <input type="hidden" name="_kit_colegio_id" id="inp-kit-colegio" value="<?= $postColegioId ?>">
-      </div>
-
-      <!-- Advertencia precio no definido (oculta por defecto) -->
-      <div id="warn-precio-kit" class="alert alert-warning py-2 small mb-2" style="display:none">
-        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-        <strong>Este kit no tiene precio de venta definido.</strong>
-        Se está usando el costo como referencia — corrígelo en el
-        <a href="<?= APP_URL ?>/modules/kits/" target="_blank" class="alert-link">formulario del kit</a>
-        antes de confirmar la orden.
-      </div>
-
-      <!-- Cantidad + precio -->
-      <div class="row g-2 align-items-end" id="bloque-precio" style="<?= $postKitId ? '' : 'display:none' ?>">
-        <div class="col-sm-3">
-          <label class="form-label small fw-semibold">Cantidad</label>
-          <input type="number" name="cantidad" id="inp-cantidad" class="form-control"
-                 min="1" value="<?= (int)($_POST['cantidad'] ?? 1) ?>"
-                 onchange="calcTotal()" oninput="calcTotal()">
-        </div>
-        <div class="col-sm-4">
-          <label class="form-label small fw-semibold">Precio unitario</label>
-          <div class="input-group">
-            <span class="input-group-text small">$</span>
-            <input type="text" name="precio_unitario" id="inp-precio" class="form-control"
-                   placeholder="0"
-                   value="<?= htmlspecialchars($_POST['precio_unitario'] ?? '') ?>"
-                   oninput="calcTotal()">
-          </div>
-        </div>
-        <div class="col-sm-5">
-          <label class="form-label small fw-semibold">Total del pedido</label>
-          <div class="input-group">
-            <span class="input-group-text small fw-bold">$</span>
-            <input type="text" name="total" id="inp-total" class="form-control fw-bold"
-                   placeholder="0"
-                   value="<?= htmlspecialchars($_POST['total'] ?? '') ?>">
-          </div>
-          <div class="form-text">Editable si hay descuento.</div>
-        </div>
-      </div>
+      <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2"
+              onclick="addItem()">
+        <i class="bi bi-plus-circle me-1"></i>Agregar producto
+      </button>
     </div>
 
     <!-- 3. Entrega -->
@@ -528,12 +486,11 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       </div>
     </div>
 
-    <!-- Resumen precio -->
-    <div class="form-section" id="box-resumen" style="display:none">
-      <div class="form-section-title"><i class="bi bi-receipt me-1"></i>Resumen</div>
-      <div id="resumen-kit" class="small text-muted mb-1"></div>
+    <!-- Resumen total -->
+    <div class="form-section">
+      <div class="form-section-title"><i class="bi bi-receipt me-1"></i>Total del pedido</div>
       <div class="precio-display" id="resumen-total">$0</div>
-      <div class="text-muted" style="font-size:.72rem">Total del pedido</div>
+      <div id="resumen-items-detalle" class="text-muted mt-1" style="font-size:.72rem"></div>
     </div>
 
     <!-- Botón crear -->
@@ -550,154 +507,216 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </form>
 
 <script>
-// Datos cargados desde PHP
+// ── Datos PHP → JS ───────────────────────────────────────────────
 var CURSOS_X_COLEGIO = <?= json_encode($cursosXColegio) ?>;
 var KITS_X_COLEGIO   = <?= json_encode($kitsXColegio)   ?>;
 var KIT_DATA         = <?= json_encode($kitData)         ?>;
+var COLEGIOS_LIST    = <?= json_encode($colegiosList)    ?>;
 
-// ── Embudo colegio → curso → kit ─────────────────────────────────
-function onColegioChange(colegioId) {
-    var selCurso  = document.getElementById('sel-curso');
-    var selKit    = document.getElementById('sel-kit');
-    var blqCurso  = document.getElementById('bloque-curso');
-    var blqKit    = document.getElementById('bloque-kit');
-    var blqPrecio = document.getElementById('bloque-precio');
-    var boxRes    = document.getElementById('box-resumen');
+var _itemSeq = 0; // contador global de ítems (no se resetea al eliminar)
 
-    // Limpiar selects dependientes
-    selCurso.innerHTML = '<option value="">— Seleccionar curso —</option>';
-    selKit.innerHTML   = '<option value="">— Seleccionar kit —</option>';
-    selKit.disabled    = false;
-    document.getElementById('inp-kit-id').value = '';
-    document.getElementById('inp-precio').value = '';
-    document.getElementById('inp-total').value  = '';
-    blqPrecio.style.display = 'none';
-    boxRes.style.display    = 'none';
-
-    if (!colegioId) {
-        blqCurso.style.display = 'none';
-        blqKit.style.display   = 'none';
-        return;
-    }
-
-    // Poblar cursos
-    var cursos = CURSOS_X_COLEGIO[colegioId] || [];
-    blqCurso.style.display = '';
-    blqKit.style.display   = '';
-    document.getElementById('inp-kit-colegio').value = colegioId;
-
-    if (cursos.length > 0) {
-        cursos.forEach(function(c) {
-            var opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.label;
-            opt.dataset.kitId = c.kit_id || '';
-            selCurso.appendChild(opt);
-        });
-    } else {
-        // No hay cursos registrados; mostrar kits del colegio directamente
-        poblarKits(colegioId, null);
-        document.getElementById('kit-hint').textContent = '';
-        blqCurso.style.display = 'none';
-    }
-
-    poblarKits(colegioId, null);
+// ── Helpers ──────────────────────────────────────────────────────
+function _colegioOpts(selId) {
+    var html = '<option value="">— Sin colegio / Genérico —</option>';
+    COLEGIOS_LIST.forEach(function(c) {
+        var sel = (c.id == selId) ? ' selected' : '';
+        html += '<option value="' + c.id + '"' + sel + '>'
+             + c.nombre.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</option>';
+    });
+    return html;
 }
 
-function onCursoChange(cursoId) {
-    var selCurso  = document.getElementById('sel-curso');
-    var opt       = selCurso.options[selCurso.selectedIndex];
-    var kitId     = opt ? opt.dataset.kitId : '';
-    var colegioId = document.getElementById('inp-kit-colegio').value;
-
-    if (kitId) {
-        // Curso con kit asignado: embudo estricto — solo ese kit, dropdown bloqueado
-        poblarKits(colegioId, parseInt(kitId), true);
-        document.getElementById('sel-kit').value = kitId;
-        document.getElementById('sel-kit').disabled = true;
-        document.getElementById('inp-kit-id').value = kitId;
-        document.getElementById('kit-hint').textContent = '(kit del curso — no editable)';
-        onKitChange(kitId);
-    } else {
-        // Curso sin kit asignado: mostrar kits del colegio + genéricos
-        poblarKits(colegioId, null, false);
-        document.getElementById('sel-kit').disabled = false;
-        document.getElementById('inp-kit-id').value = '';
-        document.getElementById('kit-hint').textContent = '(sin kit asignado — selecciona manualmente)';
-    }
+function _lastColegioId() {
+    var sels = document.querySelectorAll('select[name$="[colegio_id]"]');
+    return sels.length ? sels[sels.length - 1].value : '';
 }
 
-function poblarKits(colegioId, preselId, soloPresel) {
-    var selKit = document.getElementById('sel-kit');
-    selKit.innerHTML = '<option value="">— Seleccionar kit —</option>';
+// ── Crear ítem ───────────────────────────────────────────────────
+function addItem(colegioPreset) {
+    var n = _itemSeq++;
+    var colId = (colegioPreset !== undefined) ? colegioPreset : _lastColegioId();
 
-    var kits;
-    if (soloPresel && preselId) {
-        // Embudo estricto: solo el kit del curso
-        var todo = (KITS_X_COLEGIO[colegioId] || []).concat(KITS_X_COLEGIO[0] || []);
-        kits = todo.filter(function(k) { return k.id === preselId; });
-        // Si por algún motivo no está en el índice por colegio, buscarlo en KIT_DATA
-        if (kits.length === 0 && KIT_DATA[preselId]) {
-            kits = [{ id: preselId, nombre: KIT_DATA[preselId].nombre, precio: KIT_DATA[preselId].precio }];
-        }
-    } else {
-        // Lista completa: kits del colegio + genéricos
-        kits = (KITS_X_COLEGIO[colegioId] || []).concat(KITS_X_COLEGIO[0] || []);
+    var tpl = '<div class="item-card border rounded p-2 mb-2 bg-white" id="item-row-' + n + '">'
+        + '<div class="d-flex justify-content-between align-items-center mb-2">'
+        + '<span class="fw-semibold small text-primary item-num"></span>'
+        + '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeItem(' + n + ')"><i class="bi bi-x"></i></button>'
+        + '</div>'
+        + '<div class="row g-2">'
+        // Colegio
+        + '<div class="col-12">'
+        + '<label class="form-label small text-muted mb-1">Colegio</label>'
+        + '<select name="items[' + n + '][colegio_id]" class="form-select form-select-sm" onchange="onItemColChange(' + n + ',this.value)">'
+        + _colegioOpts(colId) + '</select></div>'
+        // Curso
+        + '<div class="col-12 col-sm-6" id="blq-cur-' + n + '" style="display:none">'
+        + '<label class="form-label small text-muted mb-1">Curso / Grado</label>'
+        + '<select name="items[' + n + '][curso_id]" id="sel-cur-' + n + '" class="form-select form-select-sm" onchange="onItemCurChange(' + n + ',this.value)">'
+        + '<option value="">— Seleccionar curso —</option></select></div>'
+        // Kit
+        + '<div class="col-12 col-sm-6" id="blq-kit-' + n + '" style="display:none">'
+        + '<label class="form-label small text-muted mb-1 d-flex gap-1 align-items-center">Kit <span class="text-danger">*</span>'
+        + '<span class="fw-normal text-muted" id="kit-hint-' + n + '" style="font-size:.7rem"></span></label>'
+        + '<select id="sel-kit-' + n + '" class="form-select form-select-sm" onchange="document.getElementById(\'inp-kit-' + n + '\').value=this.value;onItemKitChange(' + n + ',this.value)">'
+        + '<option value="">— Seleccionar kit —</option></select>'
+        + '<input type="hidden" name="items[' + n + '][kit_id]" id="inp-kit-' + n + '"></div>'
+        // Cantidad + precio + subtotal
+        + '<div class="col-4 col-sm-2">'
+        + '<label class="form-label small text-muted mb-1">Cant.</label>'
+        + '<input type="number" name="items[' + n + '][cantidad]" id="inp-cant-' + n + '" class="form-control form-control-sm" min="1" value="1" oninput="calcSub(' + n + ')" onchange="calcSub(' + n + ')"></div>'
+        + '<div class="col-8 col-sm-5">'
+        + '<label class="form-label small text-muted mb-1">Precio unitario</label>'
+        + '<div class="input-group input-group-sm"><span class="input-group-text">$</span>'
+        + '<input type="text" name="items[' + n + '][precio_unit]" id="inp-prc-' + n + '" class="form-control" placeholder="0" oninput="calcSub(' + n + ')"></div>'
+        + '<div id="warn-prc-' + n + '" class="form-text text-warning" style="display:none"><i class="bi bi-exclamation-triangle-fill"></i> Usando costo — define precio en el kit</div></div>'
+        + '<div class="col-12 col-sm-5 d-flex flex-column justify-content-end">'
+        + '<label class="form-label small text-muted mb-1">Subtotal</label>'
+        + '<div class="fw-bold text-success fs-6" id="sub-disp-' + n + '">$0</div>'
+        + '<input type="hidden" name="items[' + n + '][subtotal]" id="inp-sub-' + n + '" value="0"></div>'
+        + '</div></div>';
+
+    document.getElementById('items-container').insertAdjacentHTML('beforeend', tpl);
+    _renumberItems();
+    if (colId) onItemColChange(n, colId);
+}
+
+function removeItem(n) {
+    var row = document.getElementById('item-row-' + n);
+    if (row) {
+        if (document.querySelectorAll('.item-card').length <= 1) { return; } // mínimo 1
+        row.remove();
     }
+    _renumberItems();
+    calcGrandTotal();
+}
 
-    kits.forEach(function(k) {
-        var opt = document.createElement('option');
-        opt.value = k.id;
-        opt.textContent = k.nombre + (k.precio > 0 ? ' — $' + k.precio.toLocaleString('es-CO') : '');
-        if (preselId && k.id === preselId) opt.selected = true;
-        selKit.appendChild(opt);
+function _renumberItems() {
+    document.querySelectorAll('.item-card .item-num').forEach(function(el, i) {
+        el.textContent = 'Ítem ' + (i + 1);
     });
 }
 
-function onKitChange(kitId) {
-    var blqPrecio  = document.getElementById('bloque-precio');
-    var boxRes     = document.getElementById('box-resumen');
-    var warnPrecio = document.getElementById('warn-precio-kit');
-    if (!kitId || !KIT_DATA[kitId]) {
-        blqPrecio.style.display  = 'none';
-        boxRes.style.display     = 'none';
-        warnPrecio.style.display = 'none';
-        return;
-    }
-    var kit    = KIT_DATA[kitId];
-    var precio = kit.precio;
-    var costo  = kit.costo;
+// ── Embudo por ítem ──────────────────────────────────────────────
+function onItemColChange(n, colId) {
+    var selCur = document.getElementById('sel-cur-' + n);
+    var blqCur = document.getElementById('blq-cur-' + n);
+    var blqKit = document.getElementById('blq-kit-' + n);
+    var selKit = document.getElementById('sel-kit-' + n);
 
-    if (precio > 0) {
-        // Kit con precio definido — usar precio_cop
-        document.getElementById('inp-precio').value = precio;
-        document.getElementById('inp-precio').classList.remove('is-invalid');
-        warnPrecio.style.display = 'none';
-    } else if (costo > 0) {
-        // Sin precio pero con costo — usar costo como base y avisar
-        document.getElementById('inp-precio').value = costo;
-        document.getElementById('inp-precio').classList.add('is-invalid');
-        warnPrecio.style.display = '';
+    selCur.innerHTML = '<option value="">— Seleccionar curso —</option>';
+    selKit.innerHTML = '<option value="">— Seleccionar kit —</option>';
+    selKit.disabled  = false;
+    document.getElementById('inp-kit-' + n).value  = '';
+    document.getElementById('inp-prc-' + n).value  = '';
+    document.getElementById('inp-sub-' + n).value  = 0;
+    document.getElementById('sub-disp-' + n).textContent = '$0';
+    document.getElementById('warn-prc-' + n).style.display = 'none';
+    blqKit.style.display = 'none';
+    calcGrandTotal();
+
+    if (!colId) { blqCur.style.display = 'none'; return; }
+
+    var cursos = CURSOS_X_COLEGIO[colId] || [];
+    if (cursos.length) {
+        cursos.forEach(function(c) {
+            var o = document.createElement('option');
+            o.value = c.id; o.textContent = c.label; o.dataset.kitId = c.kit_id || '';
+            selCur.appendChild(o);
+        });
+        blqCur.style.display = '';
     } else {
-        // Sin precio ni costo — campo en 0, advertencia
-        document.getElementById('inp-precio').value = 0;
-        document.getElementById('inp-precio').classList.add('is-invalid');
-        warnPrecio.style.display = '';
+        blqCur.style.display = 'none';
     }
-
-    calcTotal();
-    blqPrecio.style.display = '';
-    boxRes.style.display    = '';
-    document.getElementById('resumen-kit').textContent = kit.nombre;
+    blqKit.style.display = '';
+    _poblarKitsItem(n, colId, null, false);
 }
 
-function calcTotal() {
-    var precio = parseFloat(document.getElementById('inp-precio').value.replace(/\./g,'').replace(',','.')) || 0;
-    var cant   = parseInt(document.getElementById('inp-cantidad').value) || 1;
-    var total  = precio * cant;
-    document.getElementById('inp-total').value = total > 0 ? total.toFixed(0) : '';
-    document.getElementById('resumen-total').textContent = total > 0
-        ? '$' + total.toLocaleString('es-CO') : '$0';
+function onItemCurChange(n, cursoId) {
+    var selCur   = document.getElementById('sel-cur-' + n);
+    var opt      = selCur.options[selCur.selectedIndex];
+    var kitId    = opt ? opt.dataset.kitId : '';
+    var selCol   = document.querySelector('select[name="items[' + n + '][colegio_id]"]');
+    var colId    = selCol ? selCol.value : '';
+
+    if (kitId) {
+        _poblarKitsItem(n, colId, parseInt(kitId), true);
+        var sk = document.getElementById('sel-kit-' + n);
+        sk.value = kitId; sk.disabled = true;
+        document.getElementById('inp-kit-' + n).value = kitId;
+        document.getElementById('kit-hint-' + n).textContent = '(kit del curso)';
+        onItemKitChange(n, kitId);
+    } else {
+        _poblarKitsItem(n, colId, null, false);
+        document.getElementById('sel-kit-' + n).disabled = false;
+        document.getElementById('inp-kit-' + n).value = '';
+        document.getElementById('kit-hint-' + n).textContent = '(selecciona manualmente)';
+    }
+}
+
+function _poblarKitsItem(n, colId, preselId, solo) {
+    var sel = document.getElementById('sel-kit-' + n);
+    sel.innerHTML = '<option value="">— Seleccionar kit —</option>';
+    var kits;
+    if (solo && preselId) {
+        var all = (KITS_X_COLEGIO[colId] || []).concat(KITS_X_COLEGIO[0] || []);
+        kits = all.filter(function(k){ return k.id === preselId; });
+        if (!kits.length && KIT_DATA[preselId])
+            kits = [{ id: preselId, nombre: KIT_DATA[preselId].nombre, precio: KIT_DATA[preselId].precio }];
+    } else {
+        kits = (KITS_X_COLEGIO[colId] || []).concat(KITS_X_COLEGIO[0] || []);
+    }
+    kits.forEach(function(k) {
+        var o = document.createElement('option');
+        o.value = k.id;
+        o.textContent = k.nombre + (k.precio > 0 ? ' — $' + k.precio.toLocaleString('es-CO') : '');
+        if (preselId && k.id === preselId) o.selected = true;
+        sel.appendChild(o);
+    });
+}
+
+function onItemKitChange(n, kitId) {
+    document.getElementById('blq-kit-' + n).style.display = '';
+    if (!kitId || !KIT_DATA[kitId]) {
+        document.getElementById('inp-prc-' + n).value = '';
+        document.getElementById('warn-prc-' + n).style.display = 'none';
+        calcSub(n); return;
+    }
+    var kit = KIT_DATA[kitId];
+    var inp = document.getElementById('inp-prc-' + n);
+    var wrn = document.getElementById('warn-prc-' + n);
+    if (kit.precio > 0) {
+        inp.value = kit.precio; inp.classList.remove('is-invalid'); wrn.style.display = 'none';
+    } else if (kit.costo > 0) {
+        inp.value = kit.costo;  inp.classList.add('is-invalid');    wrn.style.display = '';
+    } else {
+        inp.value = 0;          inp.classList.add('is-invalid');    wrn.style.display = '';
+    }
+    calcSub(n);
+}
+
+function calcSub(n) {
+    var prc = parseFloat(String(document.getElementById('inp-prc-' + n).value || '0').replace(/\./g,'').replace(',','.')) || 0;
+    var qty = parseInt(document.getElementById('inp-cant-' + n).value) || 1;
+    var sub = prc * qty;
+    document.getElementById('inp-sub-' + n).value = sub.toFixed(0);
+    document.getElementById('sub-disp-' + n).textContent = '$' + sub.toLocaleString('es-CO');
+    calcGrandTotal();
+}
+
+function calcGrandTotal() {
+    var total = 0, nItems = 0, names = [];
+    document.querySelectorAll('input[id^="inp-sub-"]').forEach(function(inp) {
+        var v = parseFloat(inp.value) || 0;
+        total += v; nItems++;
+    });
+    document.querySelectorAll('input[id^="inp-kit-"]').forEach(function(inp) {
+        if (inp.value && KIT_DATA[inp.value]) names.push(KIT_DATA[inp.value].nombre);
+    });
+    var fmt = '$' + total.toLocaleString('es-CO');
+    document.getElementById('resumen-total').textContent = fmt;
+    document.getElementById('items-count-badge').textContent =
+        nItems + (nItems === 1 ? ' ítem' : ' ítems') + ' · ' + fmt;
+    document.getElementById('resumen-items-detalle').textContent =
+        names.length ? names.join(' · ') : '';
 }
 
 // ── Entrega ──────────────────────────────────────────────────────
@@ -707,62 +726,26 @@ function selEntrega(tipo, el) {
     document.getElementById('inp-tipo-entrega').value = tipo;
     document.getElementById('bloque-envio').style.display    = tipo === 'envio'          ? '' : 'none';
     document.getElementById('bloque-recogida').style.display = tipo === 'recogida_local' ? '' : 'none';
-    // Sede required solo en recogida
     document.getElementById('sel-sede').required = tipo === 'recogida_local';
 }
 
-// ── Método de pago ───────────────────────────────────────────────
 function selMetodo(val, el) {
     document.querySelectorAll('.metodo-card[onclick^="selMetodo"]').forEach(function(c){ c.classList.remove('selected'); });
     el.classList.add('selected');
     document.getElementById('inp-metodo').value = val;
 }
 
-// ── Estado de pago ───────────────────────────────────────────────
 function selEstado(val, el) {
     document.querySelectorAll('.metodo-card[onclick^="selEstado"]').forEach(function(c){ c.classList.remove('selected'); });
     el.classList.add('selected');
     el.querySelector('input[type=radio]').checked = true;
 }
 
-// ── Inicialización (repoblar si hay error POST) ──────────────────
+// ── Init ─────────────────────────────────────────────────────────
 (function init() {
-    var colegioId = <?= $postColegioId ?>;
-    var cursoId   = <?= $postCursoId   ?>;
-    var kitId     = <?= $postKitId     ?>;
-
-    if (colegioId) {
-        // Disparar manualmente (no llama onchange para no limpiar valores ya puestos)
-        var selCurso  = document.getElementById('sel-curso');
-        var selKit    = document.getElementById('sel-kit');
-        document.getElementById('bloque-curso').style.display = '';
-        document.getElementById('bloque-kit').style.display   = '';
-
-        var cursos = CURSOS_X_COLEGIO[colegioId] || [];
-        cursos.forEach(function(c) {
-            var opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.label;
-            opt.dataset.kitId = c.kit_id || '';
-            if (c.id === cursoId) opt.selected = true;
-            selCurso.appendChild(opt);
-        });
-
-        poblarKits(colegioId, kitId || null);
-        if (kitId) {
-            selKit.value = kitId;
-            document.getElementById('bloque-precio').style.display = '';
-            document.getElementById('box-resumen').style.display   = '';
-            if (KIT_DATA[kitId]) {
-                document.getElementById('resumen-kit').textContent = KIT_DATA[kitId].nombre;
-                calcTotal();
-            }
-        }
-    }
-
-    // Init entrega
-    var tipoEntrega = document.getElementById('inp-tipo-entrega').value;
-    document.getElementById('sel-sede').required = tipoEntrega === 'recogida_local';
+    addItem(); // primer ítem vacío
+    document.getElementById('sel-sede').required =
+        document.getElementById('inp-tipo-entrega').value === 'recogida_local';
 })();
 </script>
 
