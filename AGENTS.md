@@ -314,42 +314,7 @@ Es el único archivo de BD del proyecto. Contiene el esquema completo + datos de
 
 ## Bugs conocidos y documentados
 
-### Bug 1 — `modules/elementos/categorias.php` no existe
-**Ubicación:** `includes/header.php`, línea ~258
-**Código afectado:**
-```php
-<a class="nav-link sidebar-link" href="<?= APP_URL ?>/modules/elementos/categorias.php">
-    <i class="bi bi-tags"></i> <span>Categorías</span>
-</a>
-```
-**Efecto:** El link "Categorías" en el sidebar (visible para roles 1 y 2) lleva a una página 404. La gestión de categorías no existe como módulo PHP aunque la tabla `categorias` sí existe en BD.
-**Solución pendiente:** Crear `modules/elementos/categorias.php` con CRUD de la tabla `categorias`.
-
-### Bug 2 — `modules/auth/config.php` no existe
-**Ubicación:** `includes/header.php`, línea ~264
-**Código afectado:**
-```php
-<a class="nav-link sidebar-link" href="<?= APP_URL ?>/modules/auth/config.php">
-    <i class="bi bi-gear"></i> <span>Configuración</span>
-</a>
-```
-**Efecto:** El link "Configuración" en el sidebar (visible para roles 1 y 2) lleva a una página 404. La tabla `configuracion` existe en BD y tiene la configuración de WooCommerce, pero no hay UI para editarla.
-**Solución pendiente:** Crear `modules/auth/config.php` (o mover a `modules/config/index.php`) con formulario para editar la tabla `configuracion`.
-
-### Bug 3 — Variable `$rm` vs `$_rm` en `header.php`
-**Ubicación:** `includes/header.php`, línea ~26
-**Código afectado:**
-```php
-.rol-badge { background: <?= $rm['color'] ?? '#185FA5' ?>; }
-```
-**Efecto:** La variable correcta es `$_rm` (definida en la línea 10 como `$_rm = Auth::getRolMeta()`). `$rm` es `undefined`, por lo que siempre usa el color por defecto `#185FA5` en lugar del color del rol del usuario. El badge de rol en el sidebar siempre sale azul.
-**Solución:** Cambiar `$rm['color']` por `$_rm['color']` en esa línea CSS inline.
-
-### Bug 4 — Inconsistencia `woo_pedidos` vs `tienda_pedidos`
-**Ubicación:** `includes/WooSync.php` usa la tabla `woo_pedidos`; `modules/produccion/index.php` hace JOIN con `tienda_pedidos`; `database/seed.sql` define `tienda_pedidos` y `tienda_pedidos_historial`.
-**Efecto:** `WooSync.php` intenta escribir en `woo_pedidos` que posiblemente no existe (el seed define `tienda_pedidos`). El módulo de producción intenta hacer JOIN con `tienda_pedidos` que puede no tener los registros importados via `WooSync`.
-**Hipótesis:** La tabla se renombró de `woo_pedidos` a `tienda_pedidos` durante el desarrollo y `WooSync.php` quedó desactualizado.
-**Solución pendiente:** Actualizar `WooSync.php` para usar `tienda_pedidos` y `tienda_pedidos_historial` en lugar de `woo_pedidos` y `woo_pedido_historial`. También actualizar `api/pedido_detalle.php` si usa la tabla vieja.
+No hay bugs conocidos pendientes en esta versión.
 
 ---
 
@@ -569,7 +534,4 @@ MS_CLIENT_ID, MS_CLIENT_SECRET, MS_TENANT_ID
 
 Los siguientes archivos son referenciados en el código pero **no existen** en el repositorio:
 
-- `modules/elementos/categorias.php` — mencionado en sidebar (Bug 1)
-- `modules/auth/config.php` — mencionado en sidebar (Bug 2)
 - `sql/01_schema_base.sql` a `sql/06_migration_v3.3.sql` — mencionados en la documentación anterior, reemplazados por `database/seed.sql`
-- Tabla `woo_pedidos` — mencionada en `WooSync.php`, la tabla real es `tienda_pedidos` (Bug 4)
