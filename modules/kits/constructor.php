@@ -32,6 +32,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='guardar_kit
     try {
         $db->beginTransaction();
 
+        $colegioId = null;
+        $grado     = null;
+
         if (!$kitId) {
             $nombre    = trim($_POST['kit_nombre'] ?? 'Kit sin nombre');
             $colegioId = (int)($_POST['colegio_id'] ?? 0) ?: null;
@@ -85,6 +88,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='guardar_kit
 
         if ($cursoId) {
             $db->prepare("UPDATE cursos SET kit_id=? WHERE id=?")->execute([$kitId,$cursoId]);
+        } elseif ($colegioId && $grado) {
+            $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=?")
+               ->execute([$kitId, $colegioId, $grado]);
         }
 
         $db->commit();

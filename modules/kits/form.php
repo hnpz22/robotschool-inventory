@@ -56,10 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         if ($colGradoExists) {
             $data['grado'] = trim($_POST['grado'] ?? '') ?: null;
         }
+        $linkColegioId = $data['colegio_id'] ?? null;
+        $linkGrado     = $data['grado']     ?? null;
+
         if ($kit) {
             $sets = implode(',', array_map(fn($k)=>"$k=:$k", array_keys($data)));
             $data['id'] = $id;
             $db->prepare("UPDATE kits SET $sets WHERE id=:id")->execute($data);
+            if ($linkColegioId && $linkGrado) {
+                $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=?")
+                   ->execute([$id, $linkColegioId, $linkGrado]);
+            }
             $success = 'Kit actualizado.';
             $kit = $db->query("SELECT * FROM kits WHERE id=$id")->fetch();
         } else {
@@ -76,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $vals = ':' . implode(',:', array_keys($data));
             $db->prepare("INSERT INTO kits ($cols) VALUES ($vals)")->execute($data);
             $newId = $db->lastInsertId();
+            if ($linkColegioId && $linkGrado) {
+                $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=?")
+                   ->execute([$newId, $linkColegioId, $linkGrado]);
+            }
             header('Location: ' . APP_URL . '/modules/kits/form.php?id=' . $newId . '&ok=1'); exit;
         }
     } catch (Exception $e) { $error = $e->getMessage(); }
