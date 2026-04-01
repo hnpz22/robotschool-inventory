@@ -62,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         // Helper: vincular kit a curso activo, creándolo si no existe
         $vincularKitCurso = function(int $kitId, $colId, ?string $grado) use ($db): void {
             if (!$colId || !$grado) return;
+            // Limpiar enlace viejo: si este kit estaba asignado a otro colegio/grado, desvincularlo
+            $db->prepare("UPDATE cursos SET kit_id=NULL WHERE kit_id=? AND NOT (colegio_id=? AND grado=?)")
+               ->execute([$kitId, $colId, $grado]);
             $stmt = $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=? AND activo=1");
             $stmt->execute([$kitId, $colId, $grado]);
             if ($stmt->rowCount() === 0) {
@@ -279,10 +282,26 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <label class="form-label">Precio de Venta (COP)</label>
             <div class="input-group">
               <span class="input-group-text">$</span>
-              <input type="number" name="precio_cop" class="form-control" step="1000" min="0"
+              <input type="number" name="precio_cop" id="inp-precio-cop" class="form-control" step="1000" min="0"
                      value="<?= $kit['precio_cop'] ?? 0 ?>">
             </div>
           </div>
+          <?php if ($kit && $costoTotal > 0): ?>
+          <div class="col-md-4 d-flex align-items-end gap-2">
+            <div style="width:90px;flex-shrink:0">
+              <label class="form-label small text-muted mb-1">Margen %</label>
+              <input type="number" id="inp-margen" class="form-control form-control-sm"
+                     min="0" max="999" step="1" value="30" placeholder="30">
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    onclick="calcPrecioSugerido()"
+                    title="Costo × (1 + margen/100), redondeado al millar">
+              <i class="bi bi-calculator me-1"></i>Sugerir precio
+            </button>
+          </div>
+          <?php else: ?>
+          <div class="col-md-4"></div>
+          <?php endif; ?>
           <div class="col-md-4 d-flex align-items-end">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" name="incluye_prototipo" id="chkProto"
@@ -601,6 +620,16 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <script>
 var GRADOS_X_COLEGIO = <?= json_encode($gradosByColegio) ?>;
 var GRADOS_LABELS    = <?= json_encode($ALL_GRADOS_LABELS) ?>;
+var COSTO_KIT        = <?= (float)($costoTotal ?? 0) ?>;
+
+function calcPrecioSugerido() {
+    if (!COSTO_KIT) return;
+    var pct    = parseFloat(document.getElementById('inp-margen').value) || 0;
+    var precio = COSTO_KIT * (1 + pct / 100);
+    // Redondear al millar más cercano
+    precio = Math.round(precio / 1000) * 1000;
+    document.getElementById('inp-precio-cop').value = precio;
+}
 
 function onKitColegioChange(colegioId) {
     var blq      = document.getElementById('blq-grado-kit');

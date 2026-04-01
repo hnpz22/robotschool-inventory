@@ -172,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'cantidad'       => $cantidad,
                 'usuario_id'     => $userId,
                 'colegio_id'     => $colegioId ?: null,
-                'fuente'         => 'tienda_manual',
+                'fuente'         => 'tienda',
                 'titulo'         => "$kitNombre × $cantidad — $ordenId",
                 'historial_nota' => 'Creado desde pedido manual en tienda',
             ]);
@@ -364,10 +364,12 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           Kit <span class="text-danger">*</span>
           <span class="text-muted fw-normal" id="kit-hint">(según el curso seleccionado)</span>
         </label>
-        <select name="kit_id" id="sel-kit" class="form-select" required
-                onchange="onKitChange(this.value)">
+        <select id="sel-kit" class="form-select"
+                onchange="onKitChange(this.value); document.getElementById('inp-kit-id').value=this.value;">
           <option value="">— Seleccionar kit —</option>
         </select>
+        <!-- Hidden: envía kit_id aunque el select esté disabled -->
+        <input type="hidden" name="kit_id" id="inp-kit-id" value="<?= $postKitId ?>">
         <input type="hidden" name="_kit_colegio_id" id="inp-kit-colegio" value="<?= $postColegioId ?>">
       </div>
 
@@ -552,6 +554,8 @@ function onColegioChange(colegioId) {
     // Limpiar selects dependientes
     selCurso.innerHTML = '<option value="">— Seleccionar curso —</option>';
     selKit.innerHTML   = '<option value="">— Seleccionar kit —</option>';
+    selKit.disabled    = false;
+    document.getElementById('inp-kit-id').value = '';
     document.getElementById('inp-precio').value = '';
     document.getElementById('inp-total').value  = '';
     blqPrecio.style.display = 'none';
@@ -588,30 +592,46 @@ function onColegioChange(colegioId) {
 }
 
 function onCursoChange(cursoId) {
-    var selCurso = document.getElementById('sel-curso');
-    var opt      = selCurso.options[selCurso.selectedIndex];
-    var kitId    = opt ? opt.dataset.kitId : '';
+    var selCurso  = document.getElementById('sel-curso');
+    var opt       = selCurso.options[selCurso.selectedIndex];
+    var kitId     = opt ? opt.dataset.kitId : '';
     var colegioId = document.getElementById('inp-kit-colegio').value;
 
-    // Poblar kits filtrados por colegio
-    poblarKits(colegioId, kitId ? parseInt(kitId) : null);
-
     if (kitId) {
-        // Auto-seleccionar kit del curso
+        // Curso con kit asignado: embudo estricto — solo ese kit, dropdown bloqueado
+        poblarKits(colegioId, parseInt(kitId), true);
         document.getElementById('sel-kit').value = kitId;
+        document.getElementById('sel-kit').disabled = true;
+        document.getElementById('inp-kit-id').value = kitId;
+        document.getElementById('kit-hint').textContent = '(kit del curso — no editable)';
         onKitChange(kitId);
-        document.getElementById('kit-hint').textContent = '(kit del curso seleccionado)';
     } else {
+        // Curso sin kit asignado: mostrar kits del colegio + genéricos
+        poblarKits(colegioId, null, false);
+        document.getElementById('sel-kit').disabled = false;
+        document.getElementById('inp-kit-id').value = '';
         document.getElementById('kit-hint').textContent = '(sin kit asignado — selecciona manualmente)';
     }
 }
 
-function poblarKits(colegioId, preselId) {
+function poblarKits(colegioId, preselId, soloPresel) {
     var selKit = document.getElementById('sel-kit');
     selKit.innerHTML = '<option value="">— Seleccionar kit —</option>';
 
-    // Kits del colegio + genéricos
-    var kits = (KITS_X_COLEGIO[colegioId] || []).concat(KITS_X_COLEGIO[0] || []);
+    var kits;
+    if (soloPresel && preselId) {
+        // Embudo estricto: solo el kit del curso
+        var todo = (KITS_X_COLEGIO[colegioId] || []).concat(KITS_X_COLEGIO[0] || []);
+        kits = todo.filter(function(k) { return k.id === preselId; });
+        // Si por algún motivo no está en el índice por colegio, buscarlo en KIT_DATA
+        if (kits.length === 0 && KIT_DATA[preselId]) {
+            kits = [{ id: preselId, nombre: KIT_DATA[preselId].nombre, precio: KIT_DATA[preselId].precio }];
+        }
+    } else {
+        // Lista completa: kits del colegio + genéricos
+        kits = (KITS_X_COLEGIO[colegioId] || []).concat(KITS_X_COLEGIO[0] || []);
+    }
+
     kits.forEach(function(k) {
         var opt = document.createElement('option');
         opt.value = k.id;
@@ -630,7 +650,15 @@ function onKitChange(kitId) {
         return;
     }
     var precio = KIT_DATA[kitId].precio;
-    document.getElementById('inp-precio').value = precio > 0 ? precio : '';
+    // Poblar siempre, incluso si precio es 0 (para que el usuario lo note)
+    document.getElementById('inp-precio').value = precio;
+    if (precio === 0) {
+        document.getElementById('inp-precio').classList.add('is-invalid');
+        document.getElementById('inp-precio').title = 'Este kit no tiene precio definido';
+    } else {
+        document.getElementById('inp-precio').classList.remove('is-invalid');
+        document.getElementById('inp-precio').title = '';
+    }
     calcTotal();
     blqPrecio.style.display = '';
     boxRes.style.display    = '';
