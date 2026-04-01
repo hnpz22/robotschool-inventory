@@ -13,6 +13,19 @@ $error     = '';
 $kitId   = (int)($_GET['kit_id']   ?? 0);
 $cursoId = (int)($_GET['curso_id'] ?? 0);
 
+// Detección de columna grado en kits
+$colGradoExists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='kits' AND COLUMN_NAME='grado'")->fetchColumn();
+$colGradosColExists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='colegios' AND COLUMN_NAME='grados'")->fetchColumn();
+
+$ALL_GRADOS_LABELS = [
+    'transicion' => 'Transición',
+    '1'  => '1°',  '2'  => '2°',  '3'  => '3°',  '4'  => '4°',  '5'  => '5°',
+    '6'  => '6°',  '7'  => '7°',  '8'  => '8°',  '9'  => '9°',
+    '10' => '10°', '11' => '11°',
+];
+
 // ── Guardar kit ──────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='guardar_kit') {
     if (!Auth::csrfVerify($_POST['csrf'] ?? '')) die('CSRF');
@@ -22,15 +35,23 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='guardar_kit
         if (!$kitId) {
             $nombre    = trim($_POST['kit_nombre'] ?? 'Kit sin nombre');
             $colegioId = (int)($_POST['colegio_id'] ?? 0) ?: null;
-            $nivel     = $_POST['nivel'] ?? 'basico';
+            $grado     = trim($_POST['grado'] ?? '') ?: null;
             $desc      = trim($_POST['descripcion'] ?? '');
             $cajId     = (int)($_POST['tipo_caja_id'] ?? 0) ?: null;
 
             $seq    = $db->query("SELECT COUNT(*)+1 FROM kits")->fetchColumn();
             $codigo = 'KIT-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
 
-            $db->prepare("INSERT INTO kits(codigo,nombre,tipo,nivel,descripcion,colegio_id,tipo_caja_id,costo_cop,activo,created_by) VALUES(?,?,'colegio',?,?,?,?,0,1,?)")
-               ->execute([$codigo,$nombre,$nivel,$desc,$colegioId,$cajId,Auth::user()['id']]);
+            $insertCols   = ['codigo','nombre','tipo','descripcion','colegio_id','tipo_caja_id','costo_cop','activo','created_by'];
+            $insertVals   = ['?','?',"'colegio'",'?','?','?','0','1','?'];
+            $insertParams = [$codigo,$nombre,$desc,$colegioId,$cajId,Auth::user()['id']];
+            if ($colGradoExists) {
+                $insertCols[] = 'grado';
+                $insertVals[] = '?';
+                $insertParams[] = $grado;
+            }
+            $db->prepare('INSERT INTO kits('.implode(',',$insertCols).') VALUES('.implode(',',$insertVals).')')
+               ->execute($insertParams);
             $kitId = $db->lastInsertId();
         } else {
             $db->prepare("DELETE FROM kit_elementos  WHERE kit_id=?")->execute([$kitId]);
@@ -106,6 +127,21 @@ $prototipos = $db->query("
 
 $colegios  = $db->query("SELECT id,nombre FROM colegios WHERE activo=1 ORDER BY nombre")->fetchAll();
 $tiposCaja = $db->query("SELECT id,nombre FROM tipos_caja WHERE activo=1 ORDER BY nombre")->fetchAll();
+
+// Grados por colegio para JS (de cursos + colegios.grados si existe)
+$gradosByColegio = [];
+foreach ($db->query("SELECT DISTINCT colegio_id, grado FROM cursos WHERE activo=1 AND grado IS NOT NULL ORDER BY colegio_id, grado+0, grado")->fetchAll() as $r) {
+    $gradosByColegio[(int)$r['colegio_id']][] = $r['grado'];
+}
+if ($colGradosColExists) {
+    foreach ($db->query("SELECT id, grados FROM colegios WHERE activo=1 AND grados IS NOT NULL AND grados != ''")->fetchAll() as $row) {
+        $extra = array_filter(array_map('trim', explode(',', $row['grados'])));
+        if ($extra) {
+            $existing = $gradosByColegio[(int)$row['id']] ?? [];
+            $gradosByColegio[(int)$row['id']] = array_values(array_unique(array_merge($existing, $extra)));
+        }
+    }
+}
 
 $porCat = [];
 foreach ($elementos as $e) $porCat[$e['cat']][] = $e;
@@ -211,8 +247,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                 <input type="number" class="form-control text-center py-0 fw-bold qty-input" style="font-size:.8rem" min="1" value="<?= $enKit ?: 1 ?>">
                 <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" onclick="cambiarCant(this,1)">+</button>
               </div>
-              <input type="hidden" name="proto_id[]"   class="hid-id"   value="<?= $p['id'] ?>">
-              <input type="hidden" name="proto_cant[]" class="hid-cant" value="<?= $enKit ?: 1 ?>">
+              <input type="hidden" <?= $enKit ? 'name="proto_id[]"'   : '' ?> class="hid-id"   value="<?= $p['id'] ?>">
+              <input type="hidden" <?= $enKit ? 'name="proto_cant[]"' : '' ?> class="hid-cant" value="<?= $enKit ?: 1 ?>">
             </div>
             <div class="mt-1 <?= $enKit?'':'d-none' ?> badge-enkit">
               <span class="badge bg-danger w-100" style="font-size:.65rem">&#10003; En el kit</span>
@@ -263,8 +299,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                 <input type="number" class="form-control text-center py-0 fw-bold qty-input" style="font-size:.78rem" min="1" value="<?= $enKit ?: 1 ?>">
                 <button type="button" class="btn btn-outline-primary btn-sm py-0 px-1" onclick="cambiarCant(this,1)">+</button>
               </div>
-              <input type="hidden" name="elem_id[]"   class="hid-id"   value="<?= $e['id'] ?>">
-              <input type="hidden" name="elem_cant[]" class="hid-cant" value="<?= $enKit ?: 1 ?>">
+              <input type="hidden" <?= $enKit ? 'name="elem_id[]"'   : '' ?> class="hid-id"   value="<?= $e['id'] ?>">
+              <input type="hidden" <?= $enKit ? 'name="elem_cant[]"' : '' ?> class="hid-cant" value="<?= $enKit ?: 1 ?>">
             </div>
             <div class="mt-1 <?= $enKit?'':'d-none' ?> badge-enkit">
               <span class="badge bg-primary w-100" style="font-size:.63rem">&#10003; En el kit</span>
@@ -294,7 +330,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                    value="<?= $curso ? 'Kit '.$curso['nombre'].' - '.$curso['colegio'] : '' ?>">
           </div>
           <div class="col-12">
-            <select name="colegio_id" class="form-select form-select-sm">
+            <select name="colegio_id" id="cons-sel-colegio" class="form-select form-select-sm"
+                    onchange="consOnColegioChange(this.value)">
               <option value="">Sin colegio</option>
               <?php foreach ($colegios as $c): ?>
                 <option value="<?= $c['id'] ?>" <?= ($curso && $curso['colegio_id']==$c['id']) ? 'selected' : '' ?>>
@@ -303,11 +340,12 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-6">
-            <select name="nivel" class="form-select form-select-sm">
-              <option value="basico">B&aacute;sico</option>
-              <option value="intermedio">Intermedio</option>
-              <option value="avanzado">Avanzado</option>
+          <div class="col-6" id="cons-blq-grado" style="<?= ($curso && $curso['colegio_id']) ? '' : 'display:none' ?>">
+            <select name="grado" id="cons-sel-grado" class="form-select form-select-sm">
+              <option value="">— Grado —</option>
+              <?php foreach ($ALL_GRADOS_LABELS as $val => $lbl): ?>
+              <option value="<?= $val ?>"><?= $lbl ?></option>
+              <?php endforeach; ?>
             </select>
           </div>
           <div class="col-6">
@@ -386,12 +424,15 @@ foreach ($prototipos as $p) {
 };
 
 function toggleItem(card, tipo, id) {
-    // card = el div.card (el elemento clickeado directamente)
+    var hidId   = card.querySelector('.hid-id');
+    var hidCant = card.querySelector('.hid-cant');
     if (card.classList.contains('seleccionado')) {
         // Quitar del kit
         card.classList.remove('seleccionado','proto');
         card.querySelector('.qty-control').style.display = 'none';
         card.querySelector('.badge-enkit').classList.add('d-none');
+        if (hidId)   hidId.removeAttribute('name');
+        if (hidCant) hidCant.removeAttribute('name');
     } else {
         // Agregar al kit
         card.classList.add('seleccionado');
@@ -400,6 +441,8 @@ function toggleItem(card, tipo, id) {
         card.querySelector('.badge-enkit').classList.remove('d-none');
         card.querySelector('.qty-input').value = 1;
         card.querySelector('.hid-cant').value  = 1;
+        if (hidId)   hidId.name   = (tipo === 'proto') ? 'proto_id[]'   : 'elem_id[]';
+        if (hidCant) hidCant.name = (tipo === 'proto') ? 'proto_cant[]' : 'elem_cant[]';
     }
     actualizarResumen();
 }
@@ -512,6 +555,26 @@ document.getElementById('buscador').addEventListener('input', function() {
 // Inicializar resumen con kit existente
 actualizarResumen();
 
+// ── Fix: sincronizar name ANTES de enviar el formulario ──────────────────
+// Solo los inputs con name llegan al POST; los sin name son ignorados.
+document.getElementById('fKit').addEventListener('submit', function () {
+    document.querySelectorAll('.item-card').forEach(function (wrap) {
+        var card    = wrap.querySelector('.card');
+        var hidId   = wrap.querySelector('.hid-id');
+        var hidCant = wrap.querySelector('.hid-cant');
+        if (!hidId) return;
+        var tipo     = wrap.dataset.tipo;
+        var selected = card && card.classList.contains('seleccionado');
+        if (selected) {
+            hidId.name   = (tipo === 'proto') ? 'proto_id[]'   : 'elem_id[]';
+            hidCant.name = (tipo === 'proto') ? 'proto_cant[]' : 'elem_cant[]';
+        } else {
+            hidId.removeAttribute('name');
+            hidCant.removeAttribute('name');
+        }
+    });
+});
+
 function verSticker() {
     // Recolectar datos de los elementos seleccionados
     var items = [];
@@ -542,6 +605,36 @@ function verSticker() {
     sessionStorage.setItem('sticker_kit_nombre', kitNombre);
     window.open('sticker_caja.php<?= $kitId?"?kit_id=$kitId":'' ?>', '_blank');
 }
+</script>
+
+<script>
+// Grados por colegio para el constructor
+var CONS_GRADOS_X_COLEGIO = <?= json_encode($gradosByColegio) ?>;
+var CONS_GRADOS_LABELS    = <?= json_encode($ALL_GRADOS_LABELS) ?>;
+
+function consOnColegioChange(colegioId) {
+    var blq      = document.getElementById('cons-blq-grado');
+    var selGrado = document.getElementById('cons-sel-grado');
+    if (!blq || !selGrado) return;
+    if (!colegioId) { blq.style.display = 'none'; return; }
+    blq.style.display = '';
+    var grados = CONS_GRADOS_X_COLEGIO[colegioId] || Object.keys(CONS_GRADOS_LABELS);
+    var currentVal = selGrado.value;
+    selGrado.innerHTML = '<option value="">— Grado —</option>';
+    grados.forEach(function(g) {
+        var opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = CONS_GRADOS_LABELS[g] || g;
+        if (g === currentVal) opt.selected = true;
+        selGrado.appendChild(opt);
+    });
+}
+
+// Init si ya hay colegio seleccionado (modo edición)
+(function() {
+    var sel = document.getElementById('cons-sel-colegio');
+    if (sel && sel.value) consOnColegioChange(sel.value);
+})();
 </script>
 
 <?php require_once dirname(__DIR__, 2) . '/includes/footer.php'; ?>

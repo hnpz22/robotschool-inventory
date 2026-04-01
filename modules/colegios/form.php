@@ -13,6 +13,51 @@ $pageTitle  = $col ? 'Editar Colegio' : 'Nuevo Colegio';
 $activeMenu = 'colegios';
 $error = '';
 
+$GRADOS_OPTS = [
+    'transicion' => 'Transición',
+    '1'  => '1°',  '2'  => '2°',  '3'  => '3°',  '4'  => '4°',  '5'  => '5°',
+    '6'  => '6°',  '7'  => '7°',  '8'  => '8°',  '9'  => '9°',
+    '10' => '10°', '11' => '11°',
+];
+
+$colGradosExists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='colegios'
+    AND COLUMN_NAME='grados'")->fetchColumn();
+
+$gradosActivos = $colGradosExists
+    ? array_filter(array_map('trim', explode(',', $col['grados'] ?? '')))
+    : [];
+
+// Crea un curso por grado si aún no existe para este colegio
+function crearCursosPorGrado(PDO $db, int $colegioId, array $grados): void {
+    $nivelMap = [
+        'transicion' => 'preescolar',
+        '1' => 'primaria',  '2' => 'primaria',  '3' => 'primaria',
+        '4' => 'primaria',  '5' => 'primaria',
+        '6' => 'secundaria','7' => 'secundaria','8' => 'secundaria','9' => 'secundaria',
+        '10' => 'media',    '11' => 'media',
+    ];
+    $labelMap = [
+        'transicion' => 'Transición',
+        '1' => '1°', '2' => '2°', '3' => '3°', '4' => '4°',  '5' => '5°',
+        '6' => '6°', '7' => '7°', '8' => '8°', '9' => '9°', '10' => '10°', '11' => '11°',
+    ];
+    $check = $db->prepare("SELECT COUNT(*) FROM cursos WHERE colegio_id=? AND grado=?");
+    $ins   = $db->prepare(
+        "INSERT INTO cursos (colegio_id, nombre, grado, nivel, activo, anio)
+         VALUES (?, ?, ?, ?, 1, ?)"
+    );
+    $anio = (int)date('Y');
+    foreach ($grados as $g) {
+        $g = trim($g);
+        if (!$g || !isset($labelMap[$g])) continue;
+        $check->execute([$colegioId, $g]);
+        if ($check->fetchColumn() == 0) {
+            $ins->execute([$colegioId, $labelMap[$g], $g, $nivelMap[$g] ?? 'otro', $anio]);
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Auth::csrfVerify($_POST['csrf'] ?? '')) die('CSRF inválido');
     try {
@@ -33,13 +78,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $logo = subirFoto($file, 'colegios');
             }
         }
+        $gradosArr = $_POST['grados'] ?? [];
+        $gradosStr = is_array($gradosArr) ? (implode(',', array_filter($gradosArr)) ?: null) : null;
+
         $data = [
             'nombre'    => trim($_POST['nombre']),
             'nit'       => trim($_POST['nit']       ?? ''),
             'ciudad'    => trim($_POST['ciudad']     ?? 'Bogotá'),
             'direccion' => trim($_POST['direccion']  ?? ''),
             'tipo'      => $_POST['tipo']  ?? 'privado',
-            'nivel'     => trim($_POST['nivel']      ?? ''),
             'contacto'  => trim($_POST['contacto']   ?? ''),
             'email'     => trim($_POST['email']      ?? ''),
             'telefono'  => trim($_POST['telefono']   ?? ''),
@@ -48,16 +95,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'logo'      => $logo,
             'activo'    => 1,
         ];
+        if ($colGradosExists) {
+            $data['grados'] = $gradosStr;
+        }
+        // Si nivel sigue siendo NOT NULL (antes de migración), proveer valor por defecto
+        $nivelColInfo = $db->query("SELECT IS_NULLABLE, COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='colegios' AND COLUMN_NAME='nivel'")->fetch(PDO::FETCH_ASSOC);
+        if ($nivelColInfo && $nivelColInfo['IS_NULLABLE'] === 'NO') {
+            preg_match_all("/'([^']+)'/", $nivelColInfo['COLUMN_TYPE'] ?? '', $m);
+            $data['nivel'] = $m[1][0] ?? '';
+        }
         if ($col) {
             $sets = implode(',', array_map(fn($k)=>"$k=:$k", array_keys($data)));
             $data['id'] = $id;
             $db->prepare("UPDATE colegios SET $sets WHERE id=:id")->execute($data);
+            if ($gradosArr) crearCursosPorGrado($db, $id, $gradosArr);
             header('Location: ' . APP_URL . '/modules/colegios/ver.php?id=' . $id . '&ok=guardado'); exit;
         } else {
             $cols = implode(',', array_keys($data));
             $vals = ':' . implode(',:', array_keys($data));
             $db->prepare("INSERT INTO colegios ($cols) VALUES ($vals)")->execute($data);
             $newId = $db->lastInsertId();
+            if ($gradosArr) crearCursosPorGrado($db, $newId, $gradosArr);
             header('Location: ' . APP_URL . '/modules/colegios/ver.php?id=' . $newId . '&ok=creado'); exit;
         }
     } catch (Exception $e) { $error = $e->getMessage(); }
@@ -119,11 +178,28 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                    value="<?= htmlspecialchars($col['direccion'] ?? '') ?>"
                    placeholder="Calle 45 #10-20, Bogotá">
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Niveles que maneja</label>
-            <input type="text" name="nivel" class="form-control"
-                   value="<?= htmlspecialchars($col['nivel'] ?? '') ?>"
-                   placeholder="Ej: primaria, secundaria, media">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Grados que maneja</label>
+            <?php if (!$colGradosExists): ?>
+            <div class="alert alert-warning py-1 small mb-2">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              Ejecuta <code>migration_grados_kits.sql</code> para activar este campo.
+            </div>
+            <?php endif; ?>
+            <div class="d-flex flex-wrap gap-3 mt-1 p-2 rounded" style="background:#f8fafc;border:1px solid #e2e8f0">
+              <?php foreach ($GRADOS_OPTS as $val => $lbl): ?>
+              <div class="form-check m-0">
+                <input class="form-check-input" type="checkbox" name="grados[]"
+                       id="grado_<?= $val ?>" value="<?= $val ?>"
+                       <?= in_array($val, $gradosActivos) ? 'checked' : '' ?>
+                       <?= !$colGradosExists ? 'disabled' : '' ?>>
+                <label class="form-check-label small fw-semibold" for="grado_<?= $val ?>">
+                  <?= $lbl ?>
+                </label>
+              </div>
+              <?php endforeach; ?>
+            </div>
+            <div class="form-text">Selecciona todos los grados que ofrece el colegio.</div>
           </div>
         </div>
       </div>

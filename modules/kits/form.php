@@ -13,6 +13,12 @@ $pageTitle  = $kit ? 'Editar Kit: ' . $kit['nombre'] : 'Nuevo Kit';
 $activeMenu = 'kits';
 $error = $success = '';
 
+// ── Detección temprana de columnas opcionales (necesaria en el POST handler) ──
+$colGradoExists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='kits' AND COLUMN_NAME='grado'")->fetchColumn();
+$colGradosColExists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='colegios' AND COLUMN_NAME='grados'")->fetchColumn();
+
 // ── Guardar cabecera del kit ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_kit') {
     if (!Auth::csrfVerify($_POST['csrf'] ?? '')) die('CSRF');
@@ -38,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $data = [
             'nombre'             => trim($_POST['nombre']),
             'tipo'               => $_POST['tipo']    ?? 'generico',
-            'nivel'              => $_POST['nivel']   ?? 'basico',
+            // 'nivel' no se incluye en el formulario; mantiene el valor existente en BD
             'descripcion'        => trim($_POST['descripcion'] ?? ''),
             'colegio_id'         => ($_POST['colegio_id']  ?: null),
             'tipo_caja_id'       => ($_POST['tipo_caja_id'] ?: null),
@@ -47,6 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             'foto'               => $foto,
             'activo'             => 1,
         ];
+        if ($colGradoExists) {
+            $data['grado'] = trim($_POST['grado'] ?? '') ?: null;
+        }
         if ($kit) {
             $sets = implode(',', array_map(fn($k)=>"$k=:$k", array_keys($data)));
             $data['id'] = $id;
@@ -60,6 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $data['codigo']     = $codigo;
             $data['created_by'] = Auth::user()['id'];
             $data['costo_cop']  = 0;
+            // nivel: evitar error NOT NULL antes de ejecutar migration_grados_kits.sql
+            $colNivelKits = $db->query("SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='kits' AND COLUMN_NAME='nivel'")->fetchColumn();
+            if ($colNivelKits === 'NO') $data['nivel'] = 'basico';
             $cols = implode(',', array_keys($data));
             $vals = ':' . implode(',:', array_keys($data));
             $db->prepare("INSERT INTO kits ($cols) VALUES ($vals)")->execute($data);
@@ -128,11 +140,34 @@ function recalcularCostoKit(PDO $db, int $kitId): void {
 
 if (!empty($_GET['ok'])) $success = 'Kit creado correctamente.';
 
+$ALL_GRADOS_LABELS = [
+    'transicion' => 'Transición',
+    '1'  => '1°',  '2'  => '2°',  '3'  => '3°',  '4'  => '4°',  '5'  => '5°',
+    '6'  => '6°',  '7'  => '7°',  '8'  => '8°',  '9'  => '9°',
+    '10' => '10°', '11' => '11°',
+];
+
+// Grados disponibles por colegio (de cursos + colegios.grados si existe)
+$gradosByColegio = [];
+foreach ($db->query("SELECT DISTINCT colegio_id, grado FROM cursos WHERE activo=1 AND grado IS NOT NULL ORDER BY colegio_id, grado+0, grado")->fetchAll() as $r) {
+    $gradosByColegio[(int)$r['colegio_id']][] = $r['grado'];
+}
+if ($colGradosColExists) {
+    foreach ($db->query("SELECT id, grados FROM colegios WHERE activo=1 AND grados IS NOT NULL AND grados != ''")->fetchAll() as $row) {
+        $extra = array_filter(array_map('trim', explode(',', $row['grados'])));
+        if ($extra) {
+            $existing = $gradosByColegio[(int)$row['id']] ?? [];
+            $merged   = array_values(array_unique(array_merge($existing, $extra)));
+            $gradosByColegio[(int)$row['id']] = $merged;
+        }
+    }
+}
+
 // ── Cargar datos ──
 $elemKits   = $id ? $db->query("SELECT ke.*, e.nombre, e.codigo, e.costo_real_cop, e.peso_gramos, e.foto, c.nombre AS cat FROM kit_elementos ke JOIN elementos e ON e.id=ke.elemento_id JOIN categorias c ON c.id=e.categoria_id WHERE ke.kit_id=$id ORDER BY c.nombre, e.nombre")->fetchAll() : [];
 $protoKits  = $id ? $db->query("SELECT kp.*, p.nombre, p.codigo, p.tipo_fabricacion, p.costo_total_cop, p.foto FROM kit_prototipos kp JOIN prototipos p ON p.id=kp.prototipo_id WHERE kp.kit_id=$id")->fetchAll() : [];
 $colegios   = $db->query("SELECT id,nombre FROM colegios WHERE activo=1 ORDER BY nombre")->fetchAll();
-$tiposCaja  = $db->query("SELECT id,nombre,tipo FROM tipos_caja WHERE activo=1 ORDER BY nombre")->fetchAll();
+$tiposCaja  = $db->query("SELECT id,nombre FROM tipos_caja WHERE activo=1 ORDER BY nombre")->fetchAll();
 $elementos  = $db->query("SELECT e.id,e.codigo,e.nombre,e.costo_real_cop,c.nombre AS cat FROM elementos e JOIN categorias c ON c.id=e.categoria_id WHERE e.activo=1 ORDER BY c.nombre,e.nombre")->fetchAll();
 $prototipos = $db->query("SELECT id,codigo,nombre,tipo_fabricacion,costo_total_cop FROM prototipos WHERE activo=1 ORDER BY nombre")->fetchAll();
 
@@ -177,30 +212,32 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
               <option value="proyecto"  <?= ($kit['tipo']??'')==='proyecto' ?'selected':'' ?>>Proyecto</option>
             </select>
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Nivel</label>
-            <select name="nivel" class="form-select">
-              <option value="basico"       <?= ($kit['nivel']??'')==='basico'      ?'selected':'' ?>>&#x1F7E2; Básico</option>
-              <option value="intermedio"   <?= ($kit['nivel']??'')==='intermedio'  ?'selected':'' ?>>&#x1F7E1; Intermedio</option>
-              <option value="avanzado"     <?= ($kit['nivel']??'')==='avanzado'    ?'selected':'' ?>>&#x1F534; Avanzado</option>
-            </select>
-          </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label">Colegio (opcional)</label>
-            <select name="colegio_id" class="form-select">
+            <select name="colegio_id" id="sel-kit-colegio" class="form-select"
+                    onchange="onKitColegioChange(this.value)">
               <option value="">Kit Genérico / Sin colegio</option>
               <?php foreach ($colegios as $c): ?>
                 <option value="<?= $c['id'] ?>" <?= ($kit['colegio_id']??0)==$c['id']?'selected':'' ?>><?= htmlspecialchars($c['nombre']) ?></option>
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Tipo de Caja de Empaque</label>
+          <div class="col-md-3" id="blq-grado-kit" style="<?= ($kit['colegio_id'] ?? 0) ? '' : 'display:none' ?>">
+            <label class="form-label">Grado</label>
+            <select name="grado" id="sel-grado-kit" class="form-select">
+              <option value="">— Grado —</option>
+              <?php foreach ($ALL_GRADOS_LABELS as $val => $lbl): ?>
+              <option value="<?= $val ?>" <?= ($kit['grado'] ?? '') === $val ? 'selected' : '' ?>><?= $lbl ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Caja de empaque</label>
             <select name="tipo_caja_id" class="form-select">
               <option value="">Sin caja definida</option>
               <?php foreach ($tiposCaja as $tc): ?>
                 <option value="<?= $tc['id'] ?>" <?= ($kit['tipo_caja_id']??0)==$tc['id']?'selected':'' ?>>
-                  <?= htmlspecialchars($tc['nombre']) ?> (<?= $tc['tipo'] ?>)
+                  <?= htmlspecialchars($tc['nombre']) ?>
                 </option>
               <?php endforeach; ?>
             </select>
@@ -531,5 +568,33 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   </div>
 </div>
 <?php endif; ?>
+
+<script>
+var GRADOS_X_COLEGIO = <?= json_encode($gradosByColegio) ?>;
+var GRADOS_LABELS    = <?= json_encode($ALL_GRADOS_LABELS) ?>;
+
+function onKitColegioChange(colegioId) {
+    var blq      = document.getElementById('blq-grado-kit');
+    var selGrado = document.getElementById('sel-grado-kit');
+    if (!colegioId) { blq.style.display = 'none'; return; }
+    blq.style.display = '';
+    var grados    = GRADOS_X_COLEGIO[colegioId] || Object.keys(GRADOS_LABELS);
+    var currentVal = selGrado.value;
+    selGrado.innerHTML = '<option value="">— Grado —</option>';
+    grados.forEach(function(g) {
+        var opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = GRADOS_LABELS[g] || g;
+        if (g === currentVal) opt.selected = true;
+        selGrado.appendChild(opt);
+    });
+}
+
+// Init al cargar (modo edición con colegio ya seleccionado)
+(function() {
+    var colegioId = document.getElementById('sel-kit-colegio').value;
+    if (colegioId) onKitColegioChange(colegioId);
+})();
+</script>
 
 <?php require_once dirname(__DIR__, 2) . '/includes/footer.php'; ?>

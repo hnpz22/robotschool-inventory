@@ -31,12 +31,18 @@ $METODOS_PAGO = [
 ];
 
 // Detección de columnas opcionales
-$colTipoDespacho = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+$colTipoDespacho    = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='tipo_despacho'")->fetchColumn();
-$colSedeRecogida = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+$colSedeRecogida    = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='sede_recogida'")->fetchColumn();
+$colWooPayment      = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='woo_payment_method'")->fetchColumn();
+$colWooTotal        = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='woo_total'")->fetchColumn();
 
 // ── POST: crear pedido ────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -92,33 +98,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ciudadGuardar = $tipoEntrega === 'envio' ? ($ciudad    ?: null) : null;
 
         // Insertar con woo_order_id temporal único
+        // Se construye dinámicamente para columnas que pueden no existir aún en la BD
         $tmpId = 'MAN-TMP-' . bin2hex(random_bytes(5));
-        $db->prepare("INSERT INTO tienda_pedidos
-            (woo_order_id, estado, woo_payment_method, woo_total,
-             cliente_nombre, cliente_telefono, cliente_email,
-             direccion, ciudad, colegio_nombre, colegio_id,
-             kit_nombre, cantidad, fecha_compra, notas_internas,
-             creado_desde_csv, created_at, updated_at)
-            VALUES (?, 'pendiente', ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?, ?,
-                    ?, ?, CURDATE(), ?,
-                    0, NOW(), NOW())")
-           ->execute([
-               $tmpId,
-               $metodoPago ?: null,
-               $total > 0 ? $total : null,
-               $clienteNombre,
-               $clienteTel   ?: null,
-               $clienteEmail ?: null,
-               $dirGuardar,
-               $ciudadGuardar,
-               $colegioNombre,
-               $colegioId    ?: null,
-               $kitNombre,
-               $cantidad,
-               $notas        ?: null,
-           ]);
+
+        $insertCols   = ['woo_order_id','estado','cliente_nombre','cliente_telefono','cliente_email',
+                         'direccion','ciudad','colegio_nombre','colegio_id',
+                         'kit_nombre','cantidad','fecha_compra','notas_internas',
+                         'creado_desde_csv','created_at','updated_at'];
+        $insertVals   = ['?',"'pendiente'",'?','?','?','?','?','?','?','?','?','CURDATE()','?','0','NOW()','NOW()'];
+        $insertParams = [$tmpId, $clienteNombre, $clienteTel ?: null, $clienteEmail ?: null,
+                         $dirGuardar, $ciudadGuardar, $colegioNombre, $colegioId ?: null,
+                         $kitNombre, $cantidad, $notas ?: null];
+
+        if ($colWooPayment) {
+            $insertCols[]   = 'woo_payment_method';
+            $insertVals[]   = '?';
+            $insertParams[] = $metodoPago ?: null;
+        }
+        if ($colWooTotal) {
+            $insertCols[]   = 'woo_total';
+            $insertVals[]   = '?';
+            $insertParams[] = $total > 0 ? $total : null;
+        }
+
+        $sql = 'INSERT INTO tienda_pedidos (' . implode(',', $insertCols) . ') VALUES (' . implode(',', $insertVals) . ')';
+        $db->prepare($sql)->execute($insertParams);
 
         $newId   = (int)$db->lastInsertId();
         $ordenId = 'MAN-' . $newId;
