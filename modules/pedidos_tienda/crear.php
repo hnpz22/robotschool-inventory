@@ -227,11 +227,11 @@ foreach ($cursosRaw as $c) {
 
 // Kits: agrupados por colegio_id (0 = genéricos)
 $kitsRaw = $db->query(
-    "SELECT id, nombre, precio_cop, colegio_id FROM kits WHERE activo=1 ORDER BY nombre"
+    "SELECT id, nombre, precio_cop, costo_cop, colegio_id FROM kits WHERE activo=1 ORDER BY nombre"
 )->fetchAll(PDO::FETCH_ASSOC);
 
 $kitsXColegio = [];  // [colegio_id => [{id, nombre, precio}]], 0 = genérico
-$kitData      = [];  // [id => {nombre, precio}]  — para JS lookup
+$kitData      = [];  // [id => {nombre, precio, costo}]  — para JS lookup
 foreach ($kitsRaw as $k) {
     $key = $k['colegio_id'] ? (int)$k['colegio_id'] : 0;
     $kitsXColegio[$key][] = [
@@ -239,7 +239,11 @@ foreach ($kitsRaw as $k) {
         'nombre' => $k['nombre'],
         'precio' => (float)($k['precio_cop'] ?? 0),
     ];
-    $kitData[(int)$k['id']] = ['nombre' => $k['nombre'], 'precio' => (float)($k['precio_cop'] ?? 0)];
+    $kitData[(int)$k['id']] = [
+        'nombre' => $k['nombre'],
+        'precio' => (float)($k['precio_cop'] ?? 0),
+        'costo'  => (float)($k['costo_cop']  ?? 0),
+    ];
 }
 
 // Valores del POST para repoblar en caso de error
@@ -371,6 +375,15 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
         <!-- Hidden: envía kit_id aunque el select esté disabled -->
         <input type="hidden" name="kit_id" id="inp-kit-id" value="<?= $postKitId ?>">
         <input type="hidden" name="_kit_colegio_id" id="inp-kit-colegio" value="<?= $postColegioId ?>">
+      </div>
+
+      <!-- Advertencia precio no definido (oculta por defecto) -->
+      <div id="warn-precio-kit" class="alert alert-warning py-2 small mb-2" style="display:none">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <strong>Este kit no tiene precio de venta definido.</strong>
+        Se está usando el costo como referencia — corrígelo en el
+        <a href="<?= APP_URL ?>/modules/kits/" target="_blank" class="alert-link">formulario del kit</a>
+        antes de confirmar la orden.
       </div>
 
       <!-- Cantidad + precio -->
@@ -642,27 +655,40 @@ function poblarKits(colegioId, preselId, soloPresel) {
 }
 
 function onKitChange(kitId) {
-    var blqPrecio = document.getElementById('bloque-precio');
-    var boxRes    = document.getElementById('box-resumen');
+    var blqPrecio  = document.getElementById('bloque-precio');
+    var boxRes     = document.getElementById('box-resumen');
+    var warnPrecio = document.getElementById('warn-precio-kit');
     if (!kitId || !KIT_DATA[kitId]) {
-        blqPrecio.style.display = 'none';
-        boxRes.style.display    = 'none';
+        blqPrecio.style.display  = 'none';
+        boxRes.style.display     = 'none';
+        warnPrecio.style.display = 'none';
         return;
     }
-    var precio = KIT_DATA[kitId].precio;
-    // Poblar siempre, incluso si precio es 0 (para que el usuario lo note)
-    document.getElementById('inp-precio').value = precio;
-    if (precio === 0) {
-        document.getElementById('inp-precio').classList.add('is-invalid');
-        document.getElementById('inp-precio').title = 'Este kit no tiene precio definido';
-    } else {
+    var kit    = KIT_DATA[kitId];
+    var precio = kit.precio;
+    var costo  = kit.costo;
+
+    if (precio > 0) {
+        // Kit con precio definido — usar precio_cop
+        document.getElementById('inp-precio').value = precio;
         document.getElementById('inp-precio').classList.remove('is-invalid');
-        document.getElementById('inp-precio').title = '';
+        warnPrecio.style.display = 'none';
+    } else if (costo > 0) {
+        // Sin precio pero con costo — usar costo como base y avisar
+        document.getElementById('inp-precio').value = costo;
+        document.getElementById('inp-precio').classList.add('is-invalid');
+        warnPrecio.style.display = '';
+    } else {
+        // Sin precio ni costo — campo en 0, advertencia
+        document.getElementById('inp-precio').value = 0;
+        document.getElementById('inp-precio').classList.add('is-invalid');
+        warnPrecio.style.display = '';
     }
+
     calcTotal();
     blqPrecio.style.display = '';
     boxRes.style.display    = '';
-    document.getElementById('resumen-kit').textContent = KIT_DATA[kitId].nombre;
+    document.getElementById('resumen-kit').textContent = kit.nombre;
 }
 
 function calcTotal() {
