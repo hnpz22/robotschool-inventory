@@ -532,6 +532,34 @@ MS_CLIENT_ID, MS_CLIENT_SECRET, MS_TENANT_ID
 
 ---
 
+## Deployment y operaciones en producción
+
+Para actualizar el servidor después de un `git push`, conectarse vía SSH y ejecutar:
+
+```bash
+git fetch origin && git reset --hard origin/main
+```
+
+PHP, JS, CSS, vistas y SQL **no requieren restart** — Apache sirve los archivos directamente desde el volumen montado.
+
+### Regla crítica de Nginx en producción
+
+`docker compose restart` **NO recarga volúmenes montados** — el contenedor sigue usando la config cacheada de la imagen anterior.
+Cualquier cambio en `docker/nginx/conf.d/*.conf` requiere:
+
+```bash
+docker compose up -d --force-recreate nginx
+```
+
+Señal de que nginx está usando config vieja: los archivos del volumen aparecen como `No such file or directory` en el `find` dentro del contenedor.
+Para verificar que nginx tomó el conf correcto después del recreate:
+
+```bash
+docker exec robotschool_nginx cat /etc/nginx/conf.d/robotschool.conf | head -3
+```
+
+---
+
 ## Lo que NO existe (para no intentar importarlo o incluirlo)
 
 Los siguientes archivos son referenciados en el código pero **no existen** en el repositorio:

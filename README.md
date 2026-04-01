@@ -148,6 +148,20 @@ docker compose down -v       # detiene y elimina contenedores + volúmenes (borr
 
 ---
 
+## Referencia de comandos por tipo de cambio
+
+| Tipo de cambio | Comando en servidor |
+|----------------|---------------------|
+| PHP, JS, CSS, vistas, SQL | `git fetch origin && git reset --hard origin/main` — sin restart |
+| `.env` | `git reset --hard origin/main && docker compose up -d --force-recreate` |
+| `Dockerfile` o `docker-compose.yml` | `docker compose up -d --force-recreate` |
+| `docker/nginx/conf.d/*.conf` | `docker compose up -d --force-recreate nginx` |
+| `docker/php.ini` | `docker compose up -d --force-recreate app` |
+
+> **Nota:** `docker compose restart` nunca recarga volúmenes montados. Siempre usar `--force-recreate` para cambios de configuración.
+
+---
+
 ## Variables de entorno
 
 Todas se definen en `.env` (no commitear, está en `.gitignore`). Ver `.env.example` como referencia.
