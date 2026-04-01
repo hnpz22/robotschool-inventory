@@ -279,14 +279,20 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <textarea name="descripcion" class="form-control" rows="2"><?= htmlspecialchars($kit['descripcion'] ?? '') ?></textarea>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Precio de Venta (COP)</label>
+            <label class="form-label d-flex align-items-center gap-2">
+              Precio de Venta (COP)
+              <?php if ($kit && ($kit['precio_cop'] ?? 0) == 0): ?>
+              <span id="badge-sin-precio" class="badge bg-warning text-dark"
+                    style="font-size:.65rem" title="Sin precio de venta definido">⚠ Sin precio</span>
+              <?php endif; ?>
+            </label>
             <div class="input-group">
               <span class="input-group-text">$</span>
               <input type="number" name="precio_cop" id="inp-precio-cop" class="form-control" step="1000" min="0"
                      value="<?= $kit['precio_cop'] ?? 0 ?>">
             </div>
           </div>
-          <?php if ($kit && $costoTotal > 0): ?>
+          <?php if ($kit): ?>
           <div class="col-md-4 d-flex align-items-end gap-2">
             <div style="width:90px;flex-shrink:0">
               <label class="form-label small text-muted mb-1">Margen %</label>
@@ -623,12 +629,18 @@ var GRADOS_LABELS    = <?= json_encode($ALL_GRADOS_LABELS) ?>;
 var COSTO_KIT        = <?= (float)($costoTotal ?? 0) ?>;
 
 function calcPrecioSugerido() {
-    if (!COSTO_KIT) return;
+    if (!COSTO_KIT) {
+        alert('Este kit aún no tiene componentes con costo.\nAgrega elementos o prototipos primero para que el sistema calcule el costo base.');
+        return;
+    }
     var pct    = parseFloat(document.getElementById('inp-margen').value) || 0;
     var precio = COSTO_KIT * (1 + pct / 100);
     // Redondear al millar más cercano
     precio = Math.round(precio / 1000) * 1000;
     document.getElementById('inp-precio-cop').value = precio;
+    // Quitar badge de advertencia si el precio quedó > 0
+    var badge = document.getElementById('badge-sin-precio');
+    if (badge && precio > 0) badge.style.display = 'none';
 }
 
 function onKitColegioChange(colegioId) {
