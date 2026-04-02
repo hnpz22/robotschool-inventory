@@ -43,6 +43,9 @@ $colWooPayment      = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMN
 $colWooTotal        = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='woo_total'")->fetchColumn();
+$colEstadoPago      = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='estado_pago'")->fetchColumn();
 
 // ── POST: crear pedido ────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -140,6 +143,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insertCols[]   = 'woo_total';
             $insertVals[]   = '?';
             $insertParams[] = $grandTotal > 0 ? $grandTotal : null;
+        }
+        if ($colEstadoPago) {
+            $insertCols[]   = 'estado_pago';
+            $insertVals[]   = '?';
+            $insertParams[] = $estadoPago;
         }
 
         $sql = 'INSERT INTO tienda_pedidos (' . implode(',', $insertCols) . ') VALUES (' . implode(',', $insertVals) . ')';

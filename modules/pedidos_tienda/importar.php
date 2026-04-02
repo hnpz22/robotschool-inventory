@@ -37,6 +37,9 @@ $colAprobado  = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 $colWooTotal  = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='woo_total'")->fetchColumn();
+$colEstadoPago = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='estado_pago'")->fetchColumn();
 $tblItemsOk   = (bool) $db->query("SELECT COUNT(*) FROM information_schema.TABLES
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedido_items'")->fetchColumn();
 
@@ -250,10 +253,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     'fecha_compra'    => tp_fecha_iso($get($baseRow, 'fecha')),
                     'creado_desde_csv'=> 1,
                 ];
-                if ($colWooStatus) $data['woo_status'] = $estWoo ?: null;
-                if ($colCantidad)  $data['cantidad']   = $cantidadLegacy;
-                if ($colInstruc)   $data['instrucciones_especiales'] = $get($baseRow, 'instruc') ?: null;
+                if ($colWooStatus)  $data['woo_status']  = $estWoo ?: null;
+                if ($colCantidad)   $data['cantidad']    = $cantidadLegacy;
+                if ($colInstruc)    $data['instrucciones_especiales'] = $get($baseRow, 'instruc') ?: null;
                 if ($colWooTotal && $wooTotal > 0) $data['woo_total'] = $wooTotal;
+                if ($colEstadoPago) $data['estado_pago'] = 'aprobado';
 
                 // ── INSERT tienda_pedidos ──
                 $placeholders = ':' . implode(', :', array_keys($data));

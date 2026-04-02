@@ -66,6 +66,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <strong class="text-success"><?= $result['importados'] ?></strong> importados &bull;
   <strong class="text-secondary"><?= $result['duplicados'] ?></strong> duplicados (ya existían) &bull;
   <strong class="text-danger"><?= $result['errores'] ?></strong> errores
+  <?php if (!empty($result['statuses_vistos'])): ?>
+  <div class="mt-2 small"><strong>Statuses en WooCommerce:</strong>
+    <?php foreach ($result['statuses_vistos'] as $st => $cnt): ?>
+      <code><?= htmlspecialchars($st) ?></code> (<?= $cnt ?>)&nbsp;
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
   <?php if (!empty($result['detalle'])): ?>
   <ul class="mb-0 mt-2 small">
     <?php foreach ($result['detalle'] as $d): ?>
@@ -84,10 +91,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   </div>
   <div class="card-body">
     <p class="text-muted small mb-3">
-      Trae todos los pedidos con estado <strong>processing</strong> (pagados, pendientes de procesar)
+      Trae pedidos en estado <strong>Procesando, Completado, Recibido, Entregado y Enviado</strong>
       desde WooCommerce mediante la API REST. Se importan hasta
       <strong>2 000 pedidos</strong> (20&nbsp;páginas &times;&nbsp;100).
-      Los pedidos cuyo <code>woo_order_id</code> ya existe se omiten automáticamente.
+      Los pedidos cuyo <code>woo_order_id</code> ya existe se omiten automáticamente.<br>
+      <span class="text-muted">Mapeo: <code>processing</code> → Pendiente &bull;
+      <code>completed / recibido / entregado</code> → Entregado &bull;
+      <code>enviado</code> → Despachado</span>
     </p>
     <form method="POST">
       <input type="hidden" name="csrf" value="<?= Auth::csrfToken() ?>">

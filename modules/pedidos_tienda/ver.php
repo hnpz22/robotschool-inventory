@@ -2,6 +2,7 @@
 require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
+require_once dirname(__DIR__, 2) . '/includes/helpers.php';
 Auth::check();
 
 $db = Database::get();
@@ -61,6 +62,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && Auth::csrfVerify($_POST['csrf']??''))
 
         header('Location: ver.php?id='.$id.'&ok=1'); exit;
     }
+    if ($action === 'marcar_pagado' && Auth::isAdmin()) {
+        $db->prepare("UPDATE tienda_pedidos SET estado_pago='aprobado', pagado_at=NOW(), pagado_por=?, updated_at=NOW() WHERE id=?")
+           ->execute([Auth::user()['id'], $id]);
+        auditoria('marcar_pagado', 'tienda_pedidos', $id, ['estado_pago'=>'pendiente'], ['estado_pago'=>'aprobado']);
+        header('Location: ver.php?id='.$id.'&ok=1'); exit;
+    }
     if ($action === 'guardar_notas') {
         $db->prepare("UPDATE tienda_pedidos SET notas_internas=?, asignado_a=?, fecha_limite=?, updated_at=NOW() WHERE id=?")
            ->execute([trim($_POST['notas']??''), (int)$_POST['asignado_a']?:null, $_POST['fecha_limite']?:null, $id]);
@@ -88,6 +95,22 @@ if ($tblItemsOk) {
     $stmtItems = $db->prepare("SELECT * FROM tienda_pedido_items WHERE pedido_id=? ORDER BY id");
     $stmtItems->execute([$id]);
     $pedidoItems = $stmtItems->fetchAll();
+}
+
+$esRecogidaLocal = ($pedido['tipo_despacho'] ?? '') === 'recogida_local';
+$sedeRecogida    = $pedido['sede_recogida'] ?? '';
+// Fallback: detectar recogida local desde nota del historial de creación
+if (!$esRecogidaLocal && !empty($historial)) {
+    foreach (array_reverse($historial) as $_h) {
+        $notaH = $_h['nota'] ?? '';
+        if (str_contains($notaH, 'Recogida local')) {
+            $esRecogidaLocal = true;
+            if (empty($sedeRecogida) && preg_match('/Recogida local\s*[—\-]\s*(.+?)(?:\s*$)/u', $notaH, $_m)) {
+                $sedeRecogida = trim($_m[1]);
+            }
+            break;
+        }
+    }
 }
 
 $semCol=['rojo'=>'#ef4444','amarillo'=>'#f59e0b','verde'=>'#22c55e','completado'=>'#94a3b8'];
@@ -121,6 +144,37 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= $success ?></div><?php endif; ?>
 
+<?php if ($esRecogidaLocal): ?>
+<div class="alert d-flex align-items-center gap-3 mb-3"
+     style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;border-radius:12px;padding:.75rem 1rem">
+  <i class="bi bi-shop-window" style="font-size:1.4rem;flex-shrink:0"></i>
+  <div>
+    <div class="fw-bold">Recogida local<?= $sedeRecogida ? ' &mdash; ' . htmlspecialchars($sedeRecogida) : '' ?></div>
+    <div class="small" style="color:#3b82f6">El cliente retira el pedido en sede — no se despacha con transportadora.</div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if (($pedido['estado_pago'] ?? 'pagado') === 'pendiente'): ?>
+<div class="alert d-flex align-items-center justify-content-between gap-3 mb-3"
+     style="background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;border-radius:12px;padding:.75rem 1rem">
+  <div>
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>Pago pendiente</strong> — Este pedido no ha sido pagado todavía.
+  </div>
+  <?php if (Auth::isAdmin()): ?>
+  <form method="POST" style="flex-shrink:0">
+    <input type="hidden" name="action" value="marcar_pagado">
+    <input type="hidden" name="csrf"   value="<?= Auth::csrfToken() ?>">
+    <button type="submit" class="btn btn-sm btn-success fw-bold"
+            onclick="return confirm('¿Confirmar que el pago fue recibido?')">
+      <i class="bi bi-check2-circle me-1"></i>Marcar como pagado
+    </button>
+  </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="row g-3">
   <div class="col-lg-4">
 
@@ -135,10 +189,20 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <option value="<?= $k ?>" <?= $pedido['estado']===$k?'selected':'' ?>><?= strip_tags($e['label']) ?></option>
           <?php endforeach; ?>
         </select>
+        <?php if ($esRecogidaLocal): ?>
+        <div id="campos-despacho" style="display:<?= $pedido['estado']==='despachado'?'block':'none' ?>">
+          <div class="alert alert-info py-2 mb-2 small">
+            <i class="bi bi-shop me-1"></i>
+            <strong>Recogida local<?= $sedeRecogida ? ' &mdash; '.htmlspecialchars($sedeRecogida) : '' ?></strong>
+            &mdash; Este pedido no se envía con transportadora.
+          </div>
+        </div>
+        <?php else: ?>
         <div id="campos-despacho" style="display:<?= $pedido['estado']==='despachado'?'block':'none' ?>">
           <input type="text" name="guia_envio"     class="form-control form-control-sm mb-1" placeholder="N&uacute;mero de gu&iacute;a" value="<?= htmlspecialchars($pedido['guia_envio']??'') ?>">
           <input type="text" name="transportadora" class="form-control form-control-sm mb-2" placeholder="Transportadora" value="<?= htmlspecialchars($pedido['transportadora']??'') ?>">
         </div>
+        <?php endif; ?>
         <textarea name="nota" class="form-control form-control-sm mb-2" rows="2" placeholder="Nota opcional..."></textarea>
         <button type="submit" class="btn btn-primary btn-sm w-100">Guardar cambio de estado</button>
       </form>
@@ -151,6 +215,13 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       <?php if ($pedido['cliente_telefono']): ?><div class="small text-muted"><i class="bi bi-telephone me-1"></i><?= htmlspecialchars($pedido['cliente_telefono']) ?></div><?php endif; ?>
       <?php if ($pedido['cliente_email']): ?><div class="small text-muted"><i class="bi bi-envelope me-1"></i><?= htmlspecialchars($pedido['cliente_email']) ?></div><?php endif; ?>
       <?php if ($pedido['direccion']): ?><div class="small text-muted mt-1"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($pedido['direccion'].($pedido['ciudad']?', '.$pedido['ciudad']:'')) ?></div><?php endif; ?>
+      <?php if ($esRecogidaLocal): ?>
+      <div class="mt-2">
+        <span class="badge" style="background:#dbeafe;color:#1d4ed8;font-size:.8rem;padding:.35em .6em">
+          <i class="bi bi-shop me-1"></i>Recogida local<?= $sedeRecogida ? ' &mdash; '.htmlspecialchars($sedeRecogida) : '' ?>
+        </span>
+      </div>
+      <?php endif; ?>
       <?php if ($pedido['colegio_bd'] || $pedido['colegio_nombre']): ?>
       <div class="mt-2 pt-2" style="border-top:1px solid #f1f5f9">
         <div class="small text-muted mb-1"><i class="bi bi-building me-1"></i>Colegio</div>

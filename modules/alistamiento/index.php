@@ -32,8 +32,12 @@ $colTipoDespacho = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
 $colSedeRecogida = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
     AND COLUMN_NAME='sede_recogida'")->fetchColumn();
-$tipoDespachoSel = $colTipoDespacho ? ", p.tipo_despacho"  : ", 'envio' AS tipo_despacho";
-$sedeRecogidaSel = $colSedeRecogida ? ", p.sede_recogida"  : ", NULL AS sede_recogida";
+$colEstadoPago   = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tienda_pedidos'
+    AND COLUMN_NAME='estado_pago'")->fetchColumn();
+$tipoDespachoSel = $colTipoDespacho ? ", p.tipo_despacho"        : ", 'envio' AS tipo_despacho";
+$sedeRecogidaSel = $colSedeRecogida ? ", p.sede_recogida"        : ", NULL AS sede_recogida";
+$estadoPagoSel   = $colEstadoPago   ? ", p.estado_pago"          : ", 'pagado' AS estado_pago";
 
 // ── Sedes de recogida local (agregar/quitar sedes aquí) ──────────
 $SEDES_RECOGIDA = ['Sede Calle 75', 'Sede Calle 134'];
@@ -130,7 +134,7 @@ $BASE_SELECT = "SELECT p.id, p.woo_order_id, p.estado,
        p.cliente_nombre, p.cliente_telefono, p.cliente_email,
        p.kit_nombre, p.cantidad, p.ciudad, p.colegio_nombre,
        p.fecha_compra, p.guia_envio, p.transportadora,
-       p.direccion $instrucSel $tipoDespachoSel $sedeRecogidaSel $historialSel
+       p.direccion $instrucSel $tipoDespachoSel $sedeRecogidaSel $estadoPagoSel $historialSel
 FROM tienda_pedidos p";
 
 $cols = [];
@@ -308,9 +312,17 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           </div>
           <?php endif; ?>
 
-          <!-- Tipo de despacho (en cols 2 y 3) -->
-          <?php if ($estKey !== 'en_alistamiento'):
-            // Fuente primaria: columnas tipo_despacho / sede_recogida
+          <!-- Pago pendiente -->
+          <?php if (($p['estado_pago'] ?? 'pagado') === 'pendiente'): ?>
+          <div class="mb-2 px-2 py-1 rounded d-flex align-items-center gap-1"
+               style="background:#fef2f2;border:1px solid #fca5a5;font-size:.71rem;color:#991b1b">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Pago pendiente</strong>
+          </div>
+          <?php endif; ?>
+
+          <!-- Tipo de despacho (todas las columnas) -->
+          <?php
             $esRecogida = ($p['tipo_despacho'] ?? '') === 'recogida_local';
             $sedeVal    = $p['sede_recogida'] ?? '';
             // Fallback: parsear nota del historial (siempre disponible)
@@ -323,24 +335,23 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                     }
                 }
             }
+            if ($esRecogida):
           ?>
-            <?php if ($esRecogida): ?>
-            <div style="font-size:.72rem;color:#0891b2;margin-bottom:.3rem">
-              <i class="bi bi-shop me-1"></i>
-              <strong>Recogida local</strong>
-              <?php if (!empty($sedeVal)): ?>
-              &mdash; <?= htmlspecialchars($sedeVal) ?>
-              <?php endif; ?>
-            </div>
-            <?php elseif ($p['guia_envio'] || $p['transportadora']): ?>
-            <div style="font-size:.72rem;color:#16a34a;margin-bottom:.3rem">
-              <i class="bi bi-truck me-1"></i>
-              <?= htmlspecialchars($p['transportadora'] ?? '') ?>
-              <?php if ($p['guia_envio']): ?>
-              &mdash; <code style="font-size:.68rem"><?= htmlspecialchars($p['guia_envio']) ?></code>
-              <?php endif; ?>
-            </div>
+          <div style="font-size:.72rem;color:#0891b2;margin-bottom:.3rem">
+            <i class="bi bi-shop me-1"></i>
+            <strong>Recogida local</strong>
+            <?php if (!empty($sedeVal)): ?>
+            &mdash; <?= htmlspecialchars($sedeVal) ?>
             <?php endif; ?>
+          </div>
+          <?php elseif ($estKey !== 'en_alistamiento' && ($p['guia_envio'] || $p['transportadora'])): ?>
+          <div style="font-size:.72rem;color:#16a34a;margin-bottom:.3rem">
+            <i class="bi bi-truck me-1"></i>
+            <?= htmlspecialchars($p['transportadora'] ?? '') ?>
+            <?php if ($p['guia_envio']): ?>
+            &mdash; <code style="font-size:.68rem"><?= htmlspecialchars($p['guia_envio']) ?></code>
+            <?php endif; ?>
+          </div>
           <?php endif; ?>
 
           <!-- Acciones -->
@@ -692,12 +703,20 @@ function abrirDespacho(pid, tipo, transportadora, guia, sede) {
     document.getElementById('modal-transportadora').value = transportadora || '';
     document.getElementById('modal-guia').value           = guia || '';
     document.getElementById('modal-sede').value           = sede || '';
-    // Seleccionar el radio correspondiente
-    var radio = document.getElementById('modal-tipo-' + tipo);
-    if (radio) radio.checked = true;
+    // Preseleccionar y bloquear el tipo — no se puede cambiar lo que ya definió el pedido
+    var radioEnvio    = document.getElementById('modal-tipo-envio');
+    var radioRecogida = document.getElementById('modal-tipo-recogida');
+    radioEnvio.checked     = (tipo === 'envio');
+    radioRecogida.checked  = (tipo === 'recogida_local');
+    radioEnvio.disabled    = true;
+    radioRecogida.disabled = true;
     toggleTipo('modal', tipo);
     new bootstrap.Modal(document.getElementById('modalDespacho')).show();
 }
+document.getElementById('modalDespacho').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('modal-tipo-envio').disabled    = false;
+    document.getElementById('modal-tipo-recogida').disabled = false;
+});
 
 // ── Abrir modal despacho bulk ───────────────────────────────────
 function abrirDespachoBulk() {
