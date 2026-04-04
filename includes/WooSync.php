@@ -274,6 +274,7 @@ class WooSync {
         }
 
         $headers = "Accept: application/json\r\n" .
+                   "User-Agent: Mozilla/5.0\r\n" .
                    "Authorization: Basic " . base64_encode($this->ck . ':' . $this->cs) . "\r\n";
 
         $opts = ['http' => [
