@@ -17,6 +17,9 @@ class WooSync {
     private bool   $colEstadoPago = false;
     private bool   $tblItemsOk   = false;
 
+    /** Caché product_id → nombre de colegio (evita llamadas repetidas en importación masiva) */
+    private static array $cacheColegioProducto = [];
+
     public function __construct(PDO $db) {
         $this->db = $db;
         try {
@@ -165,6 +168,62 @@ class WooSync {
     // ── Helpers privados ──────────────────────────────────────────────────────
 
     /**
+     * Obtiene el nombre del colegio desde las categorías del producto vía API.
+     * Usa caché estática para no repetir llamadas por product_id.
+     * Retorna null si no se puede determinar.
+     */
+    private function colegioDesdeProducto(int $productId): ?string {
+        if ($productId <= 0) return null;
+
+        // Caché hit
+        if (array_key_exists($productId, self::$cacheColegioProducto)) {
+            return self::$cacheColegioProducto[$productId];
+        }
+
+        try {
+            $url = $this->url . '/wp-json/wc/v3/products/' . $productId;
+            $headers = "Accept: application/json\r\n" .
+                       "User-Agent: Mozilla/5.0\r\n" .
+                       "Authorization: Basic " . base64_encode($this->ck . ':' . $this->cs) . "\r\n";
+            $opts = ['http' => [
+                'method'        => 'GET',
+                'timeout'       => 5,
+                'header'        => $headers,
+                'ignore_errors' => true,
+            ]];
+            $resp = @file_get_contents($url, false, stream_context_create($opts));
+            if ($resp === false) {
+                self::$cacheColegioProducto[$productId] = null;
+                return null;
+            }
+            $prod = json_decode($resp, true);
+            $cats = $prod['categories'] ?? [];
+            if (empty($cats)) {
+                self::$cacheColegioProducto[$productId] = null;
+                return null;
+            }
+
+            // Preferir la categoría hija (parent != 0); si no hay, tomar la primera
+            $nombre = null;
+            foreach ($cats as $cat) {
+                if (!empty($cat['parent'])) {
+                    $nombre = trim($cat['name'] ?? '');
+                    break;
+                }
+            }
+            if (!$nombre) {
+                $nombre = trim($cats[0]['name'] ?? '') ?: null;
+            }
+
+            self::$cacheColegioProducto[$productId] = $nombre ?: null;
+            return self::$cacheColegioProducto[$productId];
+        } catch (\Throwable $e) {
+            self::$cacheColegioProducto[$productId] = null;
+            return null;
+        }
+    }
+
+    /**
      * Mapea un pedido WooCommerce (array de la API) al array de columnas de tienda_pedidos.
      */
     private function mapearPedido(array $order): array {
@@ -182,7 +241,13 @@ class WooSync {
             }
         }
 
-        // 2. Fallback: extraer slug del colegio de la URL de sesión
+        // 2. Fallback: categoría del producto vía API (nombre exacto del colegio)
+        if (!$colegioNombre) {
+            $primerProductId = (int)(($order['line_items'][0]['product_id'] ?? 0));
+            $colegioNombre = $this->colegioDesdeProducto($primerProductId);
+        }
+
+        // 3. Fallback: extraer slug del colegio de la URL de sesión
         //    Ej: .../colegios-kits/colegio-sagrado-corazon-de-jesus-medellin/
         if (!$colegioNombre && $sessionEntry) {
             if (preg_match('~colegios?-kits?/([^/?]+)~i', $sessionEntry, $m)) {
@@ -191,7 +256,7 @@ class WooSync {
             }
         }
 
-        // 3. Intentar cruzar con colegio registrado en el sistema
+        // 4. Intentar cruzar con colegio registrado en el sistema
         $colegioId = null;
         if ($colegioNombre) {
             $palabras = explode(' ', $colegioNombre);
