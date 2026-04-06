@@ -119,8 +119,8 @@ class WooSync {
             if ($this->tblItemsOk && $newId) {
                 $stItem = $this->db->prepare(
                     "INSERT INTO tienda_pedido_items
-                     (pedido_id, kit_id, kit_nombre, cantidad, precio_unit, subtotal)
-                     VALUES (?, ?, ?, ?, ?, ?)"
+                     (pedido_id, kit_id, kit_nombre, colegio_id, colegio_nombre, cantidad, precio_unit, subtotal)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 );
                 $stKit = $this->db->prepare(
                     "SELECT id FROM kits WHERE activo=1 AND nombre = ? LIMIT 1"
@@ -143,7 +143,11 @@ class WooSync {
                         $kitId = $stKitLike->fetchColumn() ?: null;
                     }
 
-                    $stItem->execute([$newId, $kitId, $nombre, $cantidad, $precioU, $total]);
+                    $stItem->execute([
+                        $newId, $kitId, $nombre,
+                        $data['colegio_id'], $data['colegio_nombre'],
+                        $cantidad, $precioU, $total,
+                    ]);
                 }
             }
 
