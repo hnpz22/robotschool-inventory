@@ -44,12 +44,12 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <!-- Page title -->
-<div class="d-flex align-items-center justify-content-between mb-4">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">Dashboard</h4>
-    <p class="text-muted small mb-0">Resumen general del inventario ROBOTSchool</p>
+    <h4 class="page-header-title">Dashboard</h4>
+    <p class="page-header-sub">Resumen general del inventario ROBOTSchool</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a href="<?= APP_URL ?>/modules/elementos/form.php" class="btn btn-primary btn-sm">
       <i class="bi bi-plus-lg me-1"></i>Nuevo Elemento
     </a>
@@ -84,7 +84,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
   <div class="col-xl-2 col-md-4 col-6">
-    <div class="card stat-card h-100">
+    <div class="card stat-card<?= $stockBajo > 0 ? ' stat-warning' : '' ?> h-100">
       <div class="card-body d-flex align-items-center gap-3">
         <div class="icon-box bg-warning bg-opacity-10 text-warning">&#x1F7E1;</div>
         <div>
@@ -133,23 +133,25 @@ require_once __DIR__ . '/includes/header.php';
   <!-- ── Semáforo por categoría ── -->
   <div class="col-xl-8">
     <div class="section-card">
-      <h6 class="fw-bold mb-3"><i class="bi bi-traffic-light me-2 text-primary"></i>Semáforo de Stock por Categoría</h6>
+      <div class="section-card-header">
+        <h6 class="section-card-title"><i class="bi bi-traffic-light me-2 text-primary"></i>Sem&aacute;foro de Stock por Categor&iacute;a</h6>
+      </div>
       <?php foreach ($semaforos as $s): ?>
       <div class="mb-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
           <span class="small fw-semibold"><?= htmlspecialchars($s['nombre']) ?></span>
           <span class="small text-muted"><?= $s['total'] ?> elementos</span>
         </div>
-        <div class="d-flex gap-1" style="height:12px;">
+        <div class="progress" style="height:8px;border-radius:4px">
           <?php
             $t = max(1,$s['total']);
             $pR = round($s['rojos']/$t*100);
             $pA = round($s['amarillos']/$t*100);
             $pV = 100 - $pR - $pA;
           ?>
-          <?php if($pR>0): ?><div class="bg-danger rounded-start" style="width:<?=$pR?>%;height:12px;" title="Sin stock: <?=$s['rojos']?>"></div><?php endif; ?>
-          <?php if($pA>0): ?><div class="bg-warning" style="width:<?=$pA?>%;height:12px;" title="Bajo: <?=$s['amarillos']?>"></div><?php endif; ?>
-          <?php if($pV>0): ?><div class="bg-success rounded-end" style="width:<?=$pV?>%;height:12px;" title="OK: <?=$s['verdes']?>"></div><?php endif; ?>
+          <?php if($pR>0): ?><div class="bg-danger rounded-start" style="width:<?=$pR?>%" title="Sin stock: <?=$s['rojos']?>"></div><?php endif; ?>
+          <?php if($pA>0): ?><div class="bg-warning" style="width:<?=$pA?>%" title="Bajo: <?=$s['amarillos']?>"></div><?php endif; ?>
+          <?php if($pV>0): ?><div class="bg-success rounded-end" style="width:<?=$pV?>%" title="OK: <?=$s['verdes']?>"></div><?php endif; ?>
         </div>
         <div class="d-flex gap-3 mt-1">
           <span class="text-danger" style="font-size:.75rem;">&#x1F534; <?=$s['rojos']?></span>
@@ -164,7 +166,9 @@ require_once __DIR__ . '/includes/header.php';
   <!-- ── Alertas críticas ── -->
   <div class="col-xl-4">
     <div class="section-card">
-      <h6 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Alertas de Stock</h6>
+      <div class="section-card-header">
+        <h6 class="section-card-title"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Alertas de Stock</h6>
+      </div>
       <?php if (empty($alertas)): ?>
         <div class="text-success text-center py-3"><i class="bi bi-check-circle fs-2"></i><br>¡Todo en orden!</div>
       <?php else: ?>
@@ -188,8 +192,8 @@ require_once __DIR__ . '/includes/header.php';
   <!-- ── Últimos movimientos ── -->
   <div class="col-12">
     <div class="section-card">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Últimos Movimientos</h6>
+      <div class="section-card-header">
+        <h6 class="section-card-title"><i class="bi bi-clock-history me-2 text-primary"></i>&Uacute;ltimos Movimientos</h6>
         <a href="<?= APP_URL ?>/modules/inventario/movimientos.php" class="btn btn-sm btn-outline-primary">Ver todos</a>
       </div>
       <div class="table-responsive">

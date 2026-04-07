@@ -1,10 +1,22 @@
 /* assets/css/app.css — ROBOTSchool Inventory */
 :root {
-  --rs-blue:    #3a72e8;
-  --rs-orange:  #ff6b00;
-  --rs-sidebar: #1e2a3a;
-  --rs-sidebar2:#253447;
+  --rs-blue:      #3a72e8;
+  --rs-orange:    #ff6b00;
+  --rs-sidebar:   #1e2a3a;
+  --rs-sidebar2:  #253447;
+  --rs-radius:    12px;
+  --rs-radius-sm: 8px;
+  --rs-shadow:    0 2px 8px rgba(0,0,0,.08);
+  --rs-shadow-md: 0 4px 16px rgba(0,0,0,.12);
+  --rs-gray-100:  #f8f9fa;
+  --rs-gray-200:  #e9ecef;
+  --rs-border:    #dee2e6;
+  --rs-text-muted:#6c757d;
+  --rs-font-sm:   .8125rem;
+  --rs-font-xs:   .75rem;
 }
+
+body { font-size: .9rem; color: #212529; background: #f4f6f9; }
 
 /* ── Layout ── */
 #wrapper { min-height: 100vh; }
@@ -25,14 +37,14 @@
 #sidebar.collapsed .sidebar-user .text-muted,
 #sidebar.collapsed .sidebar-header .fw-bold { display: none; }
 
-#page-content { min-width: 0; background: #f4f8ff; }
+#page-content { min-width: 0; background: #f4f6f9; }
 .topbar { height: 54px; position: sticky; top: 0; z-index: 100; }
 
 /* ── Sidebar links ── */
 .bg-sidebar { background: var(--rs-sidebar) !important; }
 .sidebar-link {
   color: rgba(255,255,255,.7) !important;
-  border-radius: 8px;
+  border-radius: var(--rs-radius-sm);
   padding: .5rem .8rem;
   display: flex; align-items: center; gap: .65rem;
   font-size: .9rem;
@@ -55,17 +67,111 @@
   font-size: 1rem; color: #fff; flex-shrink: 0;
 }
 
-/* ── Cards ── */
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.page-header-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+}
+.page-header-sub {
+  font-size: var(--rs-font-sm);
+  color: var(--rs-text-muted);
+  margin: .2rem 0 0;
+}
+
+/* ── Stat cards ── */
 .stat-card {
-  border: none; border-left: 3px solid var(--rs-blue); border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(58,114,232,.08);
+  border: none;
+  border-left: 3px solid var(--rs-blue);
+  border-radius: var(--rs-radius);
+  box-shadow: var(--rs-shadow);
+  background: #fff;
   transition: transform .2s, box-shadow .2s;
 }
-.stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(58,114,232,.15); }
-.stat-card.stat-danger { border-left-color: #dc3545; background-color: #fff8f8; }
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--rs-shadow-md);
+}
+.stat-card.stat-danger {
+  border-left-color: #dc3545;
+  background: #fff8f8;
+}
+.stat-card.stat-warning {
+  border-left-color: #fd7e14;
+  background: #fffaf5;
+}
 .stat-card .icon-box {
-  width: 52px; height: 52px; border-radius: 14px;
-  display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+  width: 44px; height: 44px;
+  border-radius: var(--rs-radius-sm);
+  display: flex; align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.dashboard-stat-num {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.dashboard-stat-lbl {
+  font-size: var(--rs-font-xs);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--rs-text-muted);
+  font-weight: 600;
+}
+
+/* ── Section cards ── */
+.section-card {
+  background: #fff;
+  border-radius: var(--rs-radius);
+  box-shadow: var(--rs-shadow);
+  border: 1px solid var(--rs-gray-200);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.section-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--rs-gray-200);
+}
+.section-card-title {
+  font-size: .9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ── Filter bar ── */
+.filter-bar {
+  background: #fff;
+  border-radius: var(--rs-radius);
+  box-shadow: var(--rs-shadow);
+  border: 1px solid var(--rs-gray-200);
+  padding: .875rem 1rem;
+  margin-bottom: 1.25rem;
+}
+.filter-bar .form-control,
+.filter-bar .form-select {
+  font-size: var(--rs-font-sm);
+  border-color: var(--rs-border);
+  border-radius: var(--rs-radius-sm);
+}
+.filter-bar .form-control:focus,
+.filter-bar .form-select:focus {
+  border-color: var(--rs-blue);
+  box-shadow: 0 0 0 3px rgba(24,95,165,.12);
 }
 
 /* ── Semáforo ── */
@@ -75,30 +181,115 @@
 .semaforo-azul    { color: #0dcaf0; }
 .badge-semaforo   { font-size: .78rem; padding: .3rem .65rem; border-radius: 2rem; }
 
-/* ── Tabla inventario ── */
-.table-inv th  { background: #f0f4ff; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: #555; }
-.table-inv td  { vertical-align: middle; font-size: .9rem; }
-
+/* ── Table inventory ── */
+.table-inv { font-size: var(--rs-font-sm); }
+.table-inv thead th {
+  background: var(--rs-gray-100);
+  color: var(--rs-text-muted);
+  font-size: var(--rs-font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border-bottom: 2px solid var(--rs-gray-200);
+  padding: .6rem .75rem;
+  white-space: nowrap;
+}
+.table-inv tbody tr {
+  border-bottom: 1px solid var(--rs-gray-200);
+  transition: background .15s;
+}
+.table-inv tbody tr:hover { background: var(--rs-gray-100); }
+.table-inv tbody td {
+  padding: .55rem .75rem;
+  vertical-align: middle;
+}
 
 /* ── Progress stock ── */
 .stock-bar { height: 6px; border-radius: 4px; }
 
 /* ── Formularios ── */
 .form-label { font-weight: 700; font-size: .88rem; }
-.section-card { background:#fff; border-radius:16px; padding:1.5rem; box-shadow:0 2px 12px rgba(0,0,0,.05); margin-bottom:1.5rem; }
 
 /* ── Barcode ── */
-.barcode-container { background:#fff; border:1px solid #dde6f5; border-radius:12px; padding:1rem; text-align:center; }
+.barcode-container { background: #fff; border: 1px solid #dde6f5; border-radius: var(--rs-radius); padding: 1rem; text-align: center; }
 .barcode-container canvas,
-.barcode-container svg { max-width:100%; }
+.barcode-container svg { max-width: 100%; }
 
-/* ── Dashboard donut labels ── */
-.dashboard-stat-num { font-family:'Baloo 2',cursive; font-size:2.2rem; font-weight:800; line-height:1; }
-.dashboard-stat-lbl { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:#6b7280; }
+/* ── Kit cards ── */
+.kit-card {
+  background: #fff;
+  border-radius: var(--rs-radius);
+  box-shadow: var(--rs-shadow);
+  border: 1px solid var(--rs-gray-200);
+  overflow: hidden;
+  transition: transform .2s, box-shadow .2s;
+  height: 100%;
+}
+.kit-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--rs-shadow-md);
+}
+.kit-card-img {
+  height: 140px;
+  background: var(--rs-gray-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  border-bottom: 1px solid var(--rs-gray-200);
+}
+.kit-card-body { padding: .875rem 1rem; }
+.kit-card-code {
+  font-size: var(--rs-font-xs);
+  font-weight: 600;
+  color: var(--rs-blue);
+  font-family: monospace;
+}
+.kit-card-name {
+  font-size: .9375rem;
+  font-weight: 600;
+  margin: .2rem 0 .5rem;
+}
+.kit-card-meta {
+  font-size: var(--rs-font-xs);
+  color: var(--rs-text-muted);
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-bottom: .625rem;
+}
+.kit-card-footer {
+  padding: .75rem 1rem;
+  background: var(--rs-gray-100);
+  border-top: 1px solid var(--rs-gray-200);
+  display: flex;
+  gap: .375rem;
+  align-items: center;
+}
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
-  #sidebar { position: fixed; z-index: 200; height: 100vh; left: -260px; }
+@media (max-width: 991px) {
+  #sidebar {
+    position: fixed;
+    top: 0; left: -250px;
+    height: 100vh;
+    z-index: 1050;
+    transition: left .25s ease;
+    overflow-y: auto;
+  }
   #sidebar.show { left: 0; }
   #page-content { margin-left: 0 !important; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+  .page-header > div:last-child { width: 100%; }
+  .page-header > div:last-child .btn { width: 100%; margin-bottom: .25rem; }
+}
+@media (max-width: 768px) {
+  .filter-bar .row > div { margin-bottom: .5rem; }
+  .table-inv thead th:not(:nth-child(-n+4)) { display: none; }
+  .dashboard-stat-num { font-size: 1.3rem; }
+  .kit-card-img { height: 100px; }
+}
+@media (max-width: 576px) {
+  .section-card { padding: .875rem; }
+  .page-header-title { font-size: 1.2rem; }
 }
