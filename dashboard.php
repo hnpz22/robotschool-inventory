@@ -95,7 +95,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
   <div class="col-xl-2 col-md-4 col-6">
-    <div class="card stat-card h-100">
+    <div class="card stat-card<?= $sinStock > 0 ? ' stat-danger' : '' ?> h-100">
       <div class="card-body d-flex align-items-center gap-3">
         <div class="icon-box bg-danger bg-opacity-10 text-danger">&#x1F534;</div>
         <div>

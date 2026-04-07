@@ -482,24 +482,26 @@ tr.fila-sel td{background:#eff6ff!important}
 <div class="d-flex align-items-center justify-content-between mb-3">
   <div>
     <h4 class="fw-bold mb-0">&#x1F6D2; Pedidos Tienda Online</h4>
-    <p class="text-muted small mb-0"><?= $stats['total'] ?> pedidos en total</p>
+    <p class="text-muted small mb-0"><?= $stats['total'] ?> pedidos en total<?php if ($puedeEliminar): ?><span class="badge bg-warning text-dark ms-2" style="font-size:.7rem;">⚠ Modo desarrollo</span><?php endif; ?></p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <?php if (!empty($pedidos)): ?>
-    <a href="lista_imprimible.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
-       class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul me-1"></i>Lista</a>
-    <?php endif; ?>
-    <a href="<?= APP_URL ?>/modules/alistamiento/" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-box-seam me-1"></i>Alistamiento
-    </a>
+    <div class="btn-group btn-group-sm">
+      <?php if (!empty($pedidos)): ?>
+      <a href="lista_imprimible.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
+         class="btn btn-outline-secondary"><i class="bi bi-list-ul me-1"></i>Lista</a>
+      <?php endif; ?>
+      <a href="<?= APP_URL ?>/modules/alistamiento/" class="btn btn-outline-secondary">
+        <i class="bi bi-box-seam me-1"></i>Alistamiento
+      </a>
+    </div>
     <a href="crear.php" class="btn btn-success btn-sm fw-semibold">
       <i class="bi bi-bag-plus me-1"></i>Pedido manual
     </a>
-    <a href="importar.php" class="btn btn-primary btn-sm">
+    <a href="importar.php" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-upload me-1"></i>Importar CSV
     </a>
     <?php if (Auth::isGerencia()): ?>
-    <a href="importar_woo.php" class="btn btn-outline-dark btn-sm">
+    <a href="importar_woo.php" class="btn btn-primary btn-sm">
       <i class="bi bi-cloud-download me-1"></i>Importar WooCommerce
     </a>
     <?php endif; ?>
@@ -508,12 +510,6 @@ tr.fila-sel td{background:#eff6ff!important}
 
 <?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
-<?php if ($puedeEliminar): ?>
-<div class="alert alert-warning py-1 px-3 small mb-2 d-flex align-items-center gap-2" style="border-left:4px solid #f59e0b">
-  <i class="bi bi-exclamation-triangle-fill text-warning"></i>
-  <span>&#x26A0; <strong>Modo desarrollo</strong> &mdash; eliminaci&oacute;n de pedidos habilitada</span>
-</div>
-<?php endif; ?>
 
 
 <?php

@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='guardar_kit
             $desc      = trim($_POST['descripcion'] ?? '');
             $cajId     = (int)($_POST['tipo_caja_id'] ?? 0) ?: null;
 
-            $seq    = $db->query("SELECT COUNT(*)+1 FROM kits")->fetchColumn();
+            $seq    = $db->query("SELECT COUNT(*)+1 FROM kits FOR UPDATE")->fetchColumn();
             $codigo = 'KIT-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
 
             $insertCols   = ['codigo','nombre','tipo','descripcion','colegio_id','tipo_caja_id','costo_cop','activo','created_by'];
@@ -89,8 +89,23 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='guardar_kit
         if ($cursoId) {
             $db->prepare("UPDATE cursos SET kit_id=? WHERE id=?")->execute([$kitId,$cursoId]);
         } elseif ($colegioId && $grado) {
-            $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=?")
-               ->execute([$kitId, $colegioId, $grado]);
+            $stmt = $db->prepare("UPDATE cursos SET kit_id=? WHERE colegio_id=? AND grado=? AND activo=1");
+            $stmt->execute([$kitId, $colegioId, $grado]);
+            // Si no había curso activo con ese grado, crearlo y vincularlo
+            if ($stmt->rowCount() === 0) {
+                $nivelMap = [
+                    'transicion'=>'preescolar','1'=>'primaria','2'=>'primaria','3'=>'primaria','4'=>'primaria','5'=>'primaria',
+                    '6'=>'secundaria','7'=>'secundaria','8'=>'secundaria','9'=>'secundaria','10'=>'media','11'=>'media',
+                ];
+                $labelMap = [
+                    'transicion'=>'Transición','1'=>'1°','2'=>'2°','3'=>'3°','4'=>'4°','5'=>'5°',
+                    '6'=>'6°','7'=>'7°','8'=>'8°','9'=>'9°','10'=>'10°','11'=>'11°',
+                ];
+                $nombre = $labelMap[$grado] ?? "Grado $grado";
+                $nivel  = $nivelMap[$grado] ?? 'otro';
+                $db->prepare("INSERT INTO cursos (colegio_id, nombre, grado, nivel, activo, anio, kit_id) VALUES (?,?,?,?,1,?,?)")
+                   ->execute([$colegioId, $nombre, $grado, $nivel, (int)date('Y'), $kitId]);
+            }
         }
 
         $db->commit();

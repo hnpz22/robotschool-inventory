@@ -87,7 +87,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── OPERACIONES (Admin, Gerencia, Produccion) ── -->
     <?php if (array_intersect(['inventario','kits','colegios'], $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">OPERACIONES</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['elementos','movimientos','barcodes','kits','colegios']) ? ' sidebar-divider-active' : '' ?>">OPERACIONES</div></li>
     <?php endif; ?>
 
     <?php if (in_array('inventario', $_menu)): ?>
@@ -131,7 +131,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── IMPORTACIONES (solo Admin/Gerencia) ── -->
     <?php if (in_array('pedidos', $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">IMPORTACIONES</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['pedidos','proveedores']) ? ' sidebar-divider-active' : '' ?>">IMPORTACIONES</div></li>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='pedidos'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/importaciones/index.php">
@@ -148,7 +148,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── TIENDA & PRODUCCION ── -->
     <?php if (array_intersect(['pedidos_tienda','produccion'], $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">TIENDA & PRODUCCION</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['pedidos_tienda','produccion','alistamiento','despachos']) ? ' sidebar-divider-active' : '' ?>">TIENDA & PRODUCCION</div></li>
     <?php endif; ?>
 
     <?php if (in_array('pedidos_tienda', $_menu)): ?>
@@ -196,7 +196,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── ESCUELA ── -->
     <?php if (array_intersect(['cursos','matriculas','pagos','academico'], $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">ESCUELA</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['cursos','matriculas','estudiantes','pagos','academico']) ? ' sidebar-divider-active' : '' ?>">ESCUELA</div></li>
     <?php endif; ?>
 
     <?php if (in_array('cursos', $_menu)): ?>
@@ -243,7 +243,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── COMERCIAL ── -->
     <?php if (array_intersect(['comercial','convenios'], $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">COMERCIAL</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['comercial']) ? ' sidebar-divider-active' : '' ?>">COMERCIAL</div></li>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='comercial'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/comercial/index.php">
@@ -257,7 +257,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── REPORTES ── -->
     <?php if (in_array('reportes', $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">REPORTES</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['reportes']) ? ' sidebar-divider-active' : '' ?>">REPORTES</div></li>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='reportes'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/reportes/">
@@ -268,7 +268,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
 
     <!-- ── ADMINISTRACION ── -->
     <?php if (in_array('usuarios', $_menu)): ?>
-    <li class="nav-item"><div class="sidebar-divider">ADMINISTRACI&Oacute;N</div></li>
+    <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['usuarios','roles','categorias','config']) ? ' sidebar-divider-active' : '' ?>">ADMINISTRACI&Oacute;N</div></li>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='usuarios'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/usuarios/index.php">

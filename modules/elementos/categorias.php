@@ -44,8 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['del']) && Auth::csrfVerify($_GET['csrf'] ?? '')) {
     $delId = (int)$_GET['del'];
     // Verificar que no tenga elementos activos asociados
-    $enUso = (int)$db->prepare("SELECT COUNT(*) FROM elementos WHERE categoria_id=? AND activo=1")
-                     ->execute([$delId]) ? $db->query("SELECT COUNT(*) FROM elementos WHERE categoria_id=$delId AND activo=1")->fetchColumn() : 0;
+    $stEnUso = $db->prepare("SELECT COUNT(*) FROM elementos WHERE categoria_id = ? AND activo = 1");
+    $stEnUso->execute([$delId]);
+    $enUso = (int)$stEnUso->fetchColumn();
     if ($enUso > 0) {
         $error = "No se puede desactivar: la categoría tiene $enUso elemento(s) activo(s) asociado(s).";
     } else {
