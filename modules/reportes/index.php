@@ -178,28 +178,27 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 
 <style>
-.report-toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.2rem 1.5rem; margin-bottom: 1.2rem; }
-.filter-group label { font-size: .78rem; font-weight: 600; color: #64748b; margin-bottom: .3rem; }
-.stat-chip { border-radius: 10px; padding: .45rem .9rem; font-size: .82rem; font-weight: 600; }
-.report-table thead th { background: #1e293b; color: #fff; font-size: .76rem; font-weight: 600; letter-spacing: .03em; white-space: nowrap; padding: .55rem .75rem; border: none; }
-.report-table tbody tr:hover { background: #f8fafc; }
-.report-table tbody td { font-size: .8rem; padding: .48rem .75rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+/* Reportes — NO redefinir .section-card (viene de app.css) */
+.filter-group label { font-size: .78rem; font-weight: 600; color: var(--rs-text-muted); margin-bottom: .3rem; }
+.stat-chip { border-radius: var(--rs-radius-sm); padding: .45rem .9rem; font-size: .82rem; font-weight: 600; }
+.report-table thead th { background: var(--rs-gray-100); color: var(--rs-text-muted); font-size: var(--rs-font-xs); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; padding: .55rem .75rem; border: none; border-bottom: 2px solid var(--rs-gray-200); }
+.report-table tbody tr:hover { background: var(--rs-gray-100); }
+.report-table tbody td { font-size: var(--rs-font-sm); padding: .48rem .75rem; border-bottom: 1px solid var(--rs-gray-200); vertical-align: middle; }
 .sem-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.sem-rojo    { background: #ef4444; }
-.sem-amarillo{ background: #f59e0b; }
-.sem-verde   { background: #22c55e; }
-.sem-azul    { background: #3b82f6; }
+.sem-rojo    { background: #dc3545; }
+.sem-amarillo{ background: #ffc107; }
+.sem-verde   { background: #28a745; }
+.sem-azul    { background: #0dcaf0; }
 .tipo-badge { font-size: .7rem; padding: .2rem .55rem; border-radius: 20px; font-weight: 600; }
 .tipo-entrada   { background: #dcfce7; color: #16a34a; }
 .tipo-salida    { background: #fee2e2; color: #dc2626; }
 .tipo-ajuste    { background: #fef9c3; color: #b45309; }
 .tipo-devolucion{ background: #ede9fe; color: #7c3aed; }
 .tipo-transferencia{ background: #dbeafe; color: #2563eb; }
-.section-card { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 1.2rem; margin-bottom: 1rem; }
 .cat-pill { font-size: .7rem; padding: .15rem .5rem; border-radius: 20px; color: #fff; font-weight: 600; }
 .print-btn { display: none; }
 @media print {
-  .report-toolbar, .sidebar, .topbar, .no-print { display: none !important; }
+  .filter-bar, .sidebar, .topbar, .no-print { display: none !important; }
   .print-btn { display: inline; }
   body { background: white; }
   .report-table { font-size: .72rem; }
@@ -207,12 +206,12 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </style>
 
 <!-- Header -->
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">&#x1F4CA; Reportes de Inventario</h4>
-    <p class="text-muted small mb-0">Genera reportes por referencia, importación, fechas o lotes</p>
+    <h4 class="page-header-title">&#x1F4CA; Reportes de Inventario</h4>
+    <p class="page-header-sub">Genera reportes por referencia, importación, fechas o lotes</p>
   </div>
-  <div class="d-flex gap-2 no-print">
+  <div class="d-flex gap-2 flex-wrap no-print">
     <a href="imprimir.php?<?= htmlspecialchars(http_build_query($_GET)) ?>" target="_blank"
        class="btn btn-danger btn-sm">
       <i class="bi bi-file-pdf me-1"></i>PDF / Imprimir
@@ -228,7 +227,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </div>
 
 <!-- ── FILTROS ── -->
-<div class="report-toolbar no-print">
+<div class="filter-bar no-print">
   <form method="GET" class="row g-3 align-items-end">
 
     <!-- Tipo de reporte -->

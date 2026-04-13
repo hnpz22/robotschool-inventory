@@ -280,12 +280,12 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 #modalNueva .modal-dialog{margin:.5rem auto}
 </style>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0"><i class="bi bi-kanban me-2"></i>Tablero de Producci&oacute;n</h4>
-    <p class="text-muted small mb-0">Solicitudes de todas las fuentes &mdash; <?= array_sum($stats) ?> total</p>
+    <h4 class="page-header-title"><i class="bi bi-kanban me-2"></i>Tablero de Producci&oacute;n</h4>
+    <p class="page-header-sub">Solicitudes de todas las fuentes &mdash; <?= array_sum($stats) ?> total</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a href="cronograma.php" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-calendar3 me-1"></i>Cronograma
     </a>

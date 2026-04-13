@@ -33,22 +33,21 @@ try {
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-.sc{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.stat-box{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:1rem;text-align:center}
-.grupo-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:.75rem}
+/* Estilos específicos matrículas — reutilizar sistema cuando es posible */
+.grupo-card{background:#fff;border:1px solid var(--rs-gray-200);border-radius:var(--rs-radius);overflow:hidden;margin-bottom:.75rem}
 .disp-disponible {background:#dcfce7;color:#166534}
 .disp-casi_lleno  {background:#fef9c3;color:#854d0e}
 .disp-lleno       {background:#fee2e2;color:#991b1b}
-.cupo-bar{height:6px;border-radius:3px;background:#e2e8f0;overflow:hidden;margin-top:4px}
-.cupo-fill{height:100%;border-radius:3px;transition:.3s}
+.cupo-bar{height:6px;border-radius:3px;background:var(--rs-gray-200);overflow:hidden;margin-top:4px}
+.cupo-fill{height:100%;border-radius:3px;transition:width .3s}
 </style>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">&#x1F393; Escuela ROBOTSchool</h4>
-    <p class="text-muted small mb-0">Cursos libres y semestral de rob&oacute;tica</p>
+    <h4 class="page-header-title">&#x1F393; Escuela ROBOTSchool</h4>
+    <p class="page-header-sub">Cursos libres y semestral de rob&oacute;tica</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a href="grupos.php" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-people me-1"></i>Grupos
     </a>
@@ -64,35 +63,55 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <!-- Stats -->
 <div class="row g-3 mb-3">
   <div class="col-6 col-md-3">
-    <div class="stat-box">
-      <div class="fs-3 fw-bold text-success"><?= $stats['activas'] ?></div>
-      <div class="text-muted small">Matr&iacute;culas activas</div>
+    <div class="card stat-card h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="icon-box bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle"></i></div>
+        <div>
+          <div class="dashboard-stat-num text-success"><?= $stats['activas'] ?></div>
+          <div class="dashboard-stat-lbl">Matr&iacute;culas activas</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="stat-box">
-      <div class="fs-3 fw-bold text-warning"><?= $stats['pendientes'] ?></div>
-      <div class="text-muted small">Pendientes de pago</div>
+    <div class="card stat-card<?= $stats['pendientes']>0 ? ' stat-warning' : '' ?> h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="icon-box bg-warning bg-opacity-10 text-warning"><i class="bi bi-hourglass-split"></i></div>
+        <div>
+          <div class="dashboard-stat-num text-warning"><?= $stats['pendientes'] ?></div>
+          <div class="dashboard-stat-lbl">Pendientes de pago</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="stat-box">
-      <div class="fs-3 fw-bold text-primary"><?= $stats['estudiantes'] ?></div>
-      <div class="text-muted small">Estudiantes registrados</div>
+    <div class="card stat-card h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="icon-box bg-primary bg-opacity-10 text-primary"><i class="bi bi-people"></i></div>
+        <div>
+          <div class="dashboard-stat-num text-primary"><?= $stats['estudiantes'] ?></div>
+          <div class="dashboard-stat-lbl">Estudiantes registrados</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="stat-box">
-      <div class="fs-3 fw-bold text-success">$<?= number_format($stats['recaudo_semana'],0,',','.') ?></div>
-      <div class="text-muted small">Recaudo esta semana</div>
+    <div class="card stat-card h-100">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="icon-box bg-success bg-opacity-10 text-success"><i class="bi bi-cash-coin"></i></div>
+        <div>
+          <div class="dashboard-stat-num text-success">$<?= number_format($stats['recaudo_semana'],0,',','.') ?></div>
+          <div class="dashboard-stat-lbl">Recaudo esta semana</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- Grupos disponibles con cupos -->
-<div class="sc">
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <h6 class="fw-bold mb-0"><i class="bi bi-grid me-2 text-primary"></i>Grupos y Disponibilidad de Cupos</h6>
+<div class="section-card">
+  <div class="section-card-header">
+    <h6 class="section-card-title"><i class="bi bi-grid me-2 text-primary"></i>Grupos y Disponibilidad de Cupos</h6>
     <a href="grupos.php" class="btn btn-outline-primary btn-sm">Ver todos</a>
   </div>
 
@@ -184,7 +203,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <!-- Accesos rapidos -->
 <div class="row g-3">
   <div class="col-md-4">
-    <a href="pagos.php" class="sc d-block text-decoration-none text-dark">
+    <a href="pagos.php" class="section-card d-block text-decoration-none text-dark">
       <div class="d-flex align-items-center gap-3">
         <div style="font-size:2rem">&#x1F4B0;</div>
         <div>
@@ -196,7 +215,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     </a>
   </div>
   <div class="col-md-4">
-    <a href="calendario.php" class="sc d-block text-decoration-none text-dark">
+    <a href="calendario.php" class="section-card d-block text-decoration-none text-dark">
       <div class="d-flex align-items-center gap-3">
         <div style="font-size:2rem">&#x1F4C5;</div>
         <div>
@@ -208,7 +227,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     </a>
   </div>
   <div class="col-md-4">
-    <a href="estudiantes.php" class="sc d-block text-decoration-none text-dark">
+    <a href="estudiantes.php" class="section-card d-block text-decoration-none text-dark">
       <div class="d-flex align-items-center gap-3">
         <div style="font-size:2rem">&#x1F9D1;</div>
         <div>

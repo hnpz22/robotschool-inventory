@@ -50,20 +50,20 @@ $AVATAR_COLORS = ['#185FA5','#16a34a','#dc2626','#7c3aed','#d97706','#0891b2','#
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-.sc{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.est-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;transition:.15s}
-.est-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);border-color:#93c5fd}
+/* Específicos de estudiantes — el sistema ya define .section-card */
+.est-card{background:#fff;border:1px solid var(--rs-gray-200);border-radius:var(--rs-radius);overflow:hidden;transition:transform .2s,box-shadow .2s}
+.est-card:hover{transform:translateY(-2px);box-shadow:var(--rs-shadow-md);border-color:var(--rs-blue)}
 .avatar-sm{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:#fff;flex-shrink:0}
 .badge-mat{font-size:.65rem;padding:.15rem .45rem;border-radius:20px;font-weight:700}
 </style>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0"><i class="bi bi-people me-2"></i>Estudiantes</h4>
-    <p class="text-muted small mb-0"><?= number_format($totalEst) ?> estudiantes registrados</p>
+    <h4 class="page-header-title"><i class="bi bi-people me-2"></i>Estudiantes</h4>
+    <p class="page-header-sub"><?= number_format($totalEst) ?> estudiantes registrados</p>
   </div>
-  <div class="d-flex gap-2">
-    <a href="index.php" class="btn btn-sm btn-light"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="index.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a>
     <a href="estudiante_form.php" class="btn btn-primary btn-sm fw-bold">
       <i class="bi bi-person-plus me-1"></i>Nuevo Estudiante
     </a>
@@ -74,7 +74,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 
 <!-- Buscador -->
-<div class="sc mb-2">
+<div class="filter-bar">
   <form method="GET" class="d-flex gap-2 align-items-center flex-wrap">
     <div class="input-group input-group-sm flex-grow-1" style="max-width:400px">
       <span class="input-group-text"><i class="bi bi-search"></i></span>
@@ -92,7 +92,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 
 <!-- Lista -->
 <?php if (empty($estudiantes)): ?>
-<div class="sc text-center py-5">
+<div class="section-card text-center py-5">
   <div style="font-size:3rem">&#x1F9D1;</div>
   <h5 class="fw-bold mt-2">No hay estudiantes<?= $buscar ? ' con esa busqueda' : '' ?></h5>
   <a href="estudiante_form.php" class="btn btn-primary mt-2">

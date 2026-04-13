@@ -175,20 +175,22 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </style>
 
 <!-- ── Cabecera ── -->
-<div class="d-flex align-items-center justify-content-between mb-4">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">
+    <h4 class="page-header-title">
       <i class="bi bi-box-seam me-2" style="color:#7c3aed"></i>Alistamiento
     </h4>
-    <div class="text-muted small">
+    <p class="page-header-sub">
       <span style="color:#7c3aed;font-weight:600"><?= count($cols['en_alistamiento']) ?></span> pendientes &middot;
       <span style="color:#0891b2;font-weight:600"><?= count($cols['listo_envio']) ?></span> empacados &middot;
       <span style="color:#16a34a;font-weight:600"><?= count($cols['despachado']) ?></span> enviados (últimos 30 días)
-    </div>
+    </p>
   </div>
-  <a href="<?= APP_URL ?>/modules/produccion/" class="btn btn-sm btn-light">
-    <i class="bi bi-arrow-left me-1"></i>Producción
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="<?= APP_URL ?>/modules/produccion/" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Producción
+    </a>
+  </div>
 </div>
 
 <?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>

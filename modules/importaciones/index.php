@@ -74,12 +74,12 @@ $estadoIcon  = ['borrador'=>'&#128221;','en_transito'=>'&#9992;','en_aduana'=>'&
 $estadoLabel = ['borrador'=>'Borrador','en_transito'=>'En tr&#225;nsito','en_aduana'=>'En aduana','recibido'=>'Recibido','liquidado'=>'Liquidado'];
 ?>
 
-<div class="d-flex align-items-center justify-content-between mb-4">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">Pedidos de Importaci&#243;n</h4>
-    <p class="text-muted small mb-0">Gesti&#243;n de importaciones desde China &#183; Liquidaci&#243;n DHL + Aranceles</p>
+    <h4 class="page-header-title">Pedidos de Importaci&#243;n</h4>
+    <p class="page-header-sub">Gesti&#243;n de importaciones desde China &#183; Liquidaci&#243;n DHL + Aranceles</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a href="<?= APP_URL ?>/modules/importaciones/importar_csv.php" class="btn btn-success btn-sm">
       <i class="bi bi-file-earmark-spreadsheet me-1"></i>Importar CSV/Excel
     </a>
@@ -99,12 +99,12 @@ $cards = ['borrador'=>['secondary','Borradores'],'en_transito'=>['info','En tr&#
 foreach ($cards as $est => [$col,$lbl]):
 ?>
 <div class="col">
-  <div class="card border-0 shadow-sm" style="border-left:4px solid var(--bs-<?= $col ?>) !important;">
-    <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-      <span style="font-size:1.5rem;"><?= $estadoIcon[$est] ?></span>
+  <div class="card stat-card h-100" style="border-left-color: var(--bs-<?= $col ?>)">
+    <div class="card-body d-flex align-items-center gap-3">
+      <div class="icon-box bg-<?= $col ?> bg-opacity-10 text-<?= $col ?>"><?= $estadoIcon[$est] ?></div>
       <div>
-        <div class="fw-bold fs-4 lh-1"><?= $resumen[$est] ?></div>
-        <div class="text-muted small"><?= $lbl ?></div>
+        <div class="dashboard-stat-num text-<?= $col ?>"><?= $resumen[$est] ?></div>
+        <div class="dashboard-stat-lbl"><?= $lbl ?></div>
       </div>
     </div>
   </div>

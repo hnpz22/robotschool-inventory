@@ -63,27 +63,27 @@ foreach ($db->query("SELECT categoria, COUNT(*) cnt FROM escuela_cursos WHERE ac
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-.sc{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.curso-card{background:#fff;border-radius:16px;overflow:hidden;border:1.5px solid #e2e8f0;transition:all .2s;cursor:pointer}
-.curso-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.1);border-color:transparent}
+/* Específicos cursos — el sistema ya define .section-card */
+.curso-card{background:#fff;border-radius:var(--rs-radius);overflow:hidden;border:1px solid var(--rs-gray-200);box-shadow:var(--rs-shadow);transition:transform .2s,box-shadow .2s;cursor:pointer;height:100%}
+.curso-card:hover{transform:translateY(-3px);box-shadow:var(--rs-shadow-md)}
 .curso-img{width:100%;height:160px;object-fit:cover}
 .curso-img-ph{width:100%;height:160px;display:flex;align-items:center;justify-content:center;font-size:3.5rem}
 .cat-pill{font-size:.68rem;padding:.2rem .6rem;border-radius:20px;font-weight:700}
-.nivel-pill{font-size:.65rem;padding:.15rem .5rem;border-radius:20px;font-weight:700;background:#f1f5f9;color:#475569}
-.cat-btn{padding:.4rem .85rem;border-radius:20px;border:1.5px solid #e2e8f0;background:#fff;font-size:.78rem;cursor:pointer;font-weight:600;transition:.15s;text-decoration:none;color:#374151;display:inline-flex;align-items:center;gap:.35rem}
+.nivel-pill{font-size:.65rem;padding:.15rem .5rem;border-radius:20px;font-weight:700;background:var(--rs-gray-100);color:var(--rs-text-muted)}
+.cat-btn{padding:.4rem .85rem;border-radius:20px;border:1px solid var(--rs-border);background:#fff;font-size:.78rem;cursor:pointer;font-weight:600;transition:background .15s,color .15s;text-decoration:none;color:#374151;display:inline-flex;align-items:center;gap:.35rem}
 .cat-btn:hover,.cat-btn.active{border-color:var(--cc);background:var(--cc);color:#fff}
-.horario-pill{display:inline-flex;align-items:center;gap:.3rem;background:#f0f4ff;color:#185FA5;border-radius:20px;padding:.18rem .55rem;font-size:.7rem;font-weight:600}
-.btn-accion{font-size:.75rem;padding:.3rem .6rem;border-radius:7px}
-.destacado-badge{position:absolute;top:10px;right:10px;background:#f59e0b;color:#fff;font-size:.65rem;padding:.2rem .5rem;border-radius:20px;font-weight:700}
+.horario-pill{display:inline-flex;align-items:center;gap:.3rem;background:#e7f0fd;color:var(--rs-blue);border-radius:20px;padding:.18rem .55rem;font-size:.7rem;font-weight:600}
+.btn-accion{font-size:.75rem;padding:.3rem .6rem;border-radius:var(--rs-radius-sm)}
+.destacado-badge{position:absolute;top:10px;right:10px;background:var(--rs-orange);color:#fff;font-size:.65rem;padding:.2rem .5rem;border-radius:20px;font-weight:700}
 </style>
 
 <!-- Header -->
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">&#x1F393; Cursos ROBOTSchool</h4>
-    <p class="text-muted small mb-0"><?= count($cursos) ?> curso(s) disponibles</p>
+    <h4 class="page-header-title">&#x1F393; Cursos ROBOTSchool</h4>
+    <p class="page-header-sub"><?= count($cursos) ?> curso(s) disponibles</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a href="horarios.php" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-clock me-1"></i>Horarios
     </a>
@@ -116,7 +116,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </div>
 
 <!-- Buscador -->
-<div class="sc mb-3">
+<div class="filter-bar">
   <form method="GET" class="d-flex gap-2">
     <input type="hidden" name="cat" value="<?= htmlspecialchars($fCat) ?>">
     <input type="text" name="q" class="form-control form-control-sm flex-grow-1"
@@ -135,7 +135,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 
 <!-- Grid de cursos -->
 <?php if (empty($cursos)): ?>
-<div class="sc text-center py-5">
+<div class="section-card text-center py-5">
   <div style="font-size:3rem">&#x1F393;</div>
   <h5 class="fw-bold mt-2">No hay cursos aun</h5>
   <p class="text-muted">Crea el primer curso para ROBOTSchool</p>

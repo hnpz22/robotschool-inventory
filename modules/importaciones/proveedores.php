@@ -73,14 +73,16 @@ $tipoConfig = [
 ?>
 
 <!-- Header -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">Proveedores</h4>
-    <p class="text-muted small mb-0">Gestión de todos los proveedores de ROBOTSchool</p>
+    <h4 class="page-header-title">Proveedores</h4>
+    <p class="page-header-sub">Gestión de todos los proveedores de ROBOTSchool</p>
   </div>
-  <a href="<?= APP_URL ?>/modules/importaciones/proveedor_form.php" class="btn btn-primary btn-sm">
-    <i class="bi bi-plus-lg me-1"></i>Nuevo Proveedor
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="<?= APP_URL ?>/modules/importaciones/proveedor_form.php" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Nuevo Proveedor
+    </a>
+  </div>
 </div>
 
 <?php if (!empty($_GET['ok'])): ?>
@@ -117,7 +119,7 @@ $tipoConfig = [
 </div>
 
 <!-- ── Filtros ── -->
-<div class="section-card mb-3">
+<div class="filter-bar">
   <form method="GET" class="row g-2 align-items-end">
     <div class="col-md-4">
       <label class="form-label mb-1">Buscar</label>

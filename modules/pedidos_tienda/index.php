@@ -458,11 +458,10 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
           font-size:.73rem;font-weight:600;text-decoration:none;border:1px solid transparent;transition:.1s}
 .sem-chip:hover{filter:brightness(.95)}
 .sem-chip.activo{outline:2px solid currentColor;outline-offset:1px}
-/* ── Tabla ── */
-.section-card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.rt thead th{background:#1e293b;color:#fff;padding:.45rem .7rem;font-size:.73rem;font-weight:600;white-space:nowrap;border:none}
-.rt tbody td{padding:.4rem .7rem;font-size:.8rem;border-bottom:1px solid #f1f5f9;vertical-align:middle}
-.rt tbody tr:hover td{background:#f8fafc}
+/* ── Tabla ── NO redefinir .section-card (viene de app.css con shadow y radius correctos) */
+.rt thead th{background:var(--rs-gray-100);color:var(--rs-text-muted);padding:.45rem .7rem;font-size:var(--rs-font-xs);font-weight:600;white-space:nowrap;border:none;text-transform:uppercase;letter-spacing:.05em}
+.rt tbody td{padding:.45rem .75rem;font-size:var(--rs-font-sm);border-bottom:1px solid var(--rs-gray-200);vertical-align:middle}
+.rt tbody tr:hover td{background:var(--rs-gray-100)}
 /* ── Cambiar estado dropdown ── */
 .dd-estado .dropdown-item{padding:.3rem .75rem;font-size:.78rem;cursor:pointer}
 .dd-estado .dropdown-item:hover{background:#f1f5f9}
@@ -479,10 +478,10 @@ tr.fila-sel td{background:#eff6ff!important}
 </style>
 
 <!-- ── Cabecera ── -->
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">&#x1F6D2; Pedidos Tienda Online</h4>
-    <p class="text-muted small mb-0"><?= $stats['total'] ?> pedidos en total<?php if ($puedeEliminar): ?><span class="badge bg-warning text-dark ms-2" style="font-size:.7rem;">⚠ Modo desarrollo</span><?php endif; ?></p>
+    <h4 class="page-header-title">&#x1F6D2; Pedidos Tienda Online</h4>
+    <p class="page-header-sub"><?= $stats['total'] ?> pedidos en total<?php if ($puedeEliminar): ?><span class="badge bg-warning text-dark ms-2" style="font-size:.7rem;">⚠ Modo desarrollo</span><?php endif; ?></p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <div class="btn-group btn-group-sm">
@@ -524,7 +523,7 @@ if ($totalGlobal == 0): ?>
 <?php else: ?>
 
 <!-- ── Barra de filtros compacta ── -->
-<div class="section-card py-2 mb-3">
+<div class="filter-bar">
   <form method="GET" class="row g-2 align-items-end flex-wrap">
 
     <div class="col-auto">

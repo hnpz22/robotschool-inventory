@@ -77,14 +77,16 @@ $estIcon  = ['preparando'=>'&#128230;','despachado'=>'&#9992;','entregado'=>'&#9
 $estLabel = ['preparando'=>'Preparando','despachado'=>'Despachado','entregado'=>'Entregado','anulado'=>'Anulado'];
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">&#128230; Despachos</h4>
-    <p class="text-muted small mb-0">Trazabilidad de kits enviados a colegios</p>
+    <h4 class="page-header-title">&#128230; Despachos</h4>
+    <p class="page-header-sub">Trazabilidad de kits enviados a colegios</p>
   </div>
-  <a href="<?= APP_URL ?>/modules/despachos/form.php" class="btn btn-primary">
-    <i class="bi bi-plus-lg me-2"></i>Nuevo Despacho
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="<?= APP_URL ?>/modules/despachos/form.php" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Nuevo Despacho
+    </a>
+  </div>
 </div>
 
 <!-- Tarjetas resumen -->
@@ -95,11 +97,13 @@ $tots = $db->query("SELECT estado, COUNT(*) c FROM despachos GROUP BY estado")->
 foreach ($tots as $t) $res[$t['estado']] = (int)$t['c'];
 foreach ($estLabel as $est => $lbl): ?>
 <div class="col">
-  <div class="card border-0 shadow-sm" style="border-left:4px solid var(--bs-<?= $estColor[$est] ?>) !important;">
-    <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-      <span style="font-size:1.5rem;"><?= $estIcon[$est] ?></span>
-      <div><div class="fw-bold fs-4 lh-1"><?= $res[$est] ?></div>
-      <div class="text-muted small"><?= $lbl ?></div></div>
+  <div class="card stat-card h-100" style="border-left-color: var(--bs-<?= $estColor[$est] ?>)">
+    <div class="card-body d-flex align-items-center gap-3">
+      <div class="icon-box bg-<?= $estColor[$est] ?> bg-opacity-10 text-<?= $estColor[$est] ?>"><?= $estIcon[$est] ?></div>
+      <div>
+        <div class="dashboard-stat-num text-<?= $estColor[$est] ?>"><?= $res[$est] ?></div>
+        <div class="dashboard-stat-lbl"><?= $lbl ?></div>
+      </div>
     </div>
   </div>
 </div>
@@ -107,7 +111,7 @@ foreach ($estLabel as $est => $lbl): ?>
 </div>
 
 <!-- Filtros -->
-<div class="section-card mb-3">
+<div class="filter-bar">
   <form method="GET" class="row g-2 align-items-end">
     <div class="col-md-3">
       <label class="form-label mb-1 small fw-semibold">Colegio</label>

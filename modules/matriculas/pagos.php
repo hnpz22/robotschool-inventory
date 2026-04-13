@@ -71,9 +71,7 @@ $matriculas = $db->query("
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
-.sc{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.tbl th{background:#1e293b;color:#fff;font-size:.74rem;padding:.5rem .75rem}
-.tbl td{font-size:.8rem;padding:.45rem .75rem;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+/* Solo medios de pago — tabla usa .table-inv del sistema */
 .mp-efectivo  {background:#dcfce7;color:#166534}
 .mp-nequi     {background:#fae8ff;color:#7e22ce}
 .mp-daviplata {background:#fee2e2;color:#991b1b}
@@ -81,23 +79,25 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 .mp-tarjeta   {background:#fef9c3;color:#854d0e}
 </style>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0"><i class="bi bi-cash me-2"></i>Pagos</h4>
+    <h4 class="page-header-title"><i class="bi bi-cash me-2"></i>Pagos</h4>
     <?php if ($fSabado): ?>
-      <p class="text-muted small mb-0">S&aacute;bado: <strong><?= date('d \d\e F \d\e Y', strtotime($fSabado)) ?></strong></p>
+      <p class="page-header-sub">S&aacute;bado: <strong><?= date('d \d\e F \d\e Y', strtotime($fSabado)) ?></strong></p>
     <?php endif; ?>
   </div>
-  <button class="btn btn-success btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalPago">
-    <i class="bi bi-plus-lg me-1"></i>Registrar Pago
-  </button>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-success btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalPago">
+      <i class="bi bi-plus-lg me-1"></i>Registrar Pago
+    </button>
+  </div>
 </div>
 
 <?php if ($error):   ?><div class="alert alert-danger  py-2 small"><?= htmlspecialchars($error)   ?></div><?php endif; ?>
 <?php if ($success): ?><div class="alert alert-success py-2 small"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 
 <!-- Filtros -->
-<div class="sc">
+<div class="filter-bar">
   <form method="GET" class="d-flex gap-2 flex-wrap align-items-center">
     <input type="date" name="sabado" class="form-control form-control-sm" style="max-width:150px" value="<?= $fSabado ?>">
     <select name="medio" class="form-select form-select-sm" style="max-width:150px">
@@ -113,9 +113,9 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 </div>
 
 <!-- Tabla de pagos -->
-<div class="sc p-0" style="overflow:hidden">
+<div class="section-card p-0" style="overflow:hidden">
   <div class="table-responsive">
-    <table class="table mb-0 tbl">
+    <table class="table table-hover table-inv mb-0">
       <thead><tr>
         <th>Fecha</th><th>S&aacute;bado</th><th>Estudiante</th><th>Grupo</th>
         <th>Concepto</th><th>Medio</th><th class="text-end">Valor</th>

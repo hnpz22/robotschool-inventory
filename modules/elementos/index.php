@@ -85,35 +85,39 @@ if ($vista === 'categorias') {
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 <style>
+/* Estilos específicos del módulo elementos — NO redefinir clases del sistema (.section-card, .table-inv) */
 .sem-dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
-.sem-rojo    {background:#ef4444}.sem-amarillo{background:#f59e0b}
-.sem-verde   {background:#22c55e}.sem-azul    {background:#3b82f6}
-.cat-sidebar{background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden}
-.cat-item{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;cursor:pointer;text-decoration:none;color:#374151;font-size:.82rem;border-bottom:.5px solid #f1f5f9}
-.cat-item:hover,.cat-item.active{background:#f0f9ff;color:#185FA5}
+.sem-rojo    {background:#dc3545}.sem-amarillo{background:#ffc107}
+.sem-verde   {background:#28a745}.sem-azul    {background:#0dcaf0}
+.cat-sidebar{background:#fff;border-radius:var(--rs-radius);border:1px solid var(--rs-gray-200);box-shadow:var(--rs-shadow);overflow:hidden}
+.cat-sidebar-head{padding:.6rem .75rem;background:var(--rs-sidebar);color:#fff;font-size:.78rem;font-weight:700}
+.cat-item{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;cursor:pointer;text-decoration:none;color:#374151;font-size:.82rem;border-bottom:1px solid var(--rs-gray-200)}
+.cat-item:hover,.cat-item.active{background:var(--rs-gray-100);color:var(--rs-blue)}
 .cat-item .cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.cat-item .cnt{margin-left:auto;font-size:.72rem;color:#94a3b8}
-.cat-item .warn{color:#ef4444;font-size:.7rem;font-weight:700}
-.section-card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;padding:1rem 1.2rem;margin-bottom:1rem}
-.elem-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;transition:.15s;cursor:pointer}
-.elem-card:hover{border-color:#3b82f6;box-shadow:0 4px 12px rgba(59,130,246,.15)}
-.stock-bar-wrap{height:4px;background:#f1f5f9;border-radius:2px;overflow:hidden}
-.stock-bar-fill{height:100%;border-radius:2px;transition:.3s}
-.vista-btn{padding:.3rem .7rem;border-radius:6px;border:.5px solid #e2e8f0;background:#fff;font-size:.8rem;cursor:pointer;color:#374151}
-.vista-btn.active{background:#1e293b;color:#fff;border-color:#1e293b}
-.table-inv th{background:#1e293b;color:#fff;font-size:.74rem;padding:.5rem .75rem;font-weight:600;white-space:nowrap}
-.table-inv td{font-size:.8rem;padding:.45rem .75rem;vertical-align:middle;border-bottom:1px solid #f1f5f9}
-.cat-group-header{background:#f8fafc;border-left:4px solid var(--cat-color, #3b82f6);padding:.5rem .75rem;font-weight:700;font-size:.82rem;margin:0}
+.cat-item .cnt{margin-left:auto;font-size:.72rem;color:var(--rs-text-muted)}
+.cat-item .warn{color:#dc3545;font-size:.7rem;font-weight:700}
+.elem-card{background:#fff;border:1px solid var(--rs-gray-200);border-radius:var(--rs-radius);overflow:hidden;transition:transform .2s,box-shadow .2s;cursor:pointer;height:100%}
+.elem-card:hover{transform:translateY(-2px);box-shadow:var(--rs-shadow-md)}
+.stock-bar-wrap{height:4px;background:var(--rs-gray-200);border-radius:2px;overflow:hidden}
+.stock-bar-fill{height:100%;border-radius:2px;transition:width .3s}
+.vista-btn{padding:.3rem .65rem;border-radius:var(--rs-radius-sm);border:1px solid var(--rs-border);background:#fff;font-size:.8rem;cursor:pointer;color:#374151;text-decoration:none;display:inline-flex;align-items:center}
+.vista-btn:hover{background:var(--rs-gray-100);color:var(--rs-blue)}
+.vista-btn.active{background:var(--rs-blue);color:#fff;border-color:var(--rs-blue)}
+.sem-pill{border-radius:var(--rs-radius-sm);padding:.4rem .85rem;font-size:.8rem;font-weight:600;display:inline-flex;align-items:center;gap:.4rem;text-decoration:none;border:1px solid transparent}
+.sem-pill-rojo{background:#fee2e2;color:#991b1b}
+.sem-pill-amarillo{background:#fef9c3;color:#854d0e}
+.sem-pill-verde{background:#dcfce7;color:#166534}
+.sem-pill-total{background:var(--rs-gray-100);color:var(--rs-text-muted);border-color:var(--rs-border)}
 .badge-cat{font-size:.7rem;padding:.18rem .5rem;border-radius:20px;font-weight:600}
 </style>
 
 <!-- Header -->
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header">
   <div>
-    <h4 class="fw-bold mb-0">&#x1F4E6; Inventario de Elementos</h4>
-    <p class="text-muted small mb-0"><?= number_format($total) ?> elementos &mdash; Valor total: <strong>$<?= number_format($stats['valor_total']??0,0,',','.') ?> COP</strong></p>
+    <h4 class="page-header-title">&#x1F4E6; Inventario de Elementos</h4>
+    <p class="page-header-sub"><?= number_format($total) ?> elementos &mdash; Valor total: <strong>$<?= number_format($stats['valor_total']??0,0,',','.') ?> COP</strong></p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
     <a href="<?= APP_URL ?>/modules/kits/constructor.php" class="btn btn-success btn-sm">
       <i class="bi bi-tools me-1"></i>Armar Kit
     </a>
@@ -125,10 +129,10 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 
 <!-- Stats semáforo -->
 <div class="d-flex flex-wrap gap-2 mb-3">
-  <a href="?sem=rojo<?= $catId?"&cat=$catId":'' ?>"    class="text-decoration-none" style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;display:inline-flex;align-items:center;gap:.4rem"><span class="sem-dot sem-rojo"></span><?= $stats['rojos'] ?> Sin stock</a>
-  <a href="?sem=amarillo<?= $catId?"&cat=$catId":'' ?>" class="text-decoration-none" style="background:#fef9c3;color:#854d0e;border-radius:10px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;display:inline-flex;align-items:center;gap:.4rem"><span class="sem-dot sem-amarillo"></span><?= $stats['amarillos'] ?> Stock bajo</a>
-  <a href="?sem=verde<?= $catId?"&cat=$catId":'' ?>"   class="text-decoration-none" style="background:#dcfce7;color:#166534;border-radius:10px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;display:inline-flex;align-items:center;gap:.4rem"><span class="sem-dot sem-verde"></span><?= $stats['verdes'] ?> OK</a>
-  <a href="?"                                           class="text-decoration-none" style="background:#f8fafc;color:#475569;border:1px solid #e2e8f0;border-radius:10px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;display:inline-flex;align-items:center;gap:.4rem"><i class="bi bi-list"></i><?= number_format($stats['total']) ?> Total</a>
+  <a href="?sem=rojo<?= $catId?"&cat=$catId":'' ?>"    class="sem-pill sem-pill-rojo"><span class="sem-dot sem-rojo"></span><?= $stats['rojos'] ?> Sin stock</a>
+  <a href="?sem=amarillo<?= $catId?"&cat=$catId":'' ?>" class="sem-pill sem-pill-amarillo"><span class="sem-dot sem-amarillo"></span><?= $stats['amarillos'] ?> Stock bajo</a>
+  <a href="?sem=verde<?= $catId?"&cat=$catId":'' ?>"   class="sem-pill sem-pill-verde"><span class="sem-dot sem-verde"></span><?= $stats['verdes'] ?> OK</a>
+  <a href="?"                                           class="sem-pill sem-pill-total"><i class="bi bi-list"></i><?= number_format($stats['total']) ?> Total</a>
 </div>
 
 <div class="row g-3">
@@ -136,7 +140,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <!-- ── Sidebar categorías ── -->
   <div class="col-lg-2 col-md-3">
     <div class="cat-sidebar">
-      <div style="padding:.6rem .75rem;background:#1e293b;color:#fff;font-size:.78rem;font-weight:700">
+      <div class="cat-sidebar-head">
         <i class="bi bi-grid me-1"></i>Categor&iacute;as
       </div>
       <a href="?vista=<?= $vista ?>" class="cat-item <?= !$catId?'active':'' ?>">
@@ -161,7 +165,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <div class="col-lg-10 col-md-9">
 
     <!-- Barra de búsqueda y vistas -->
-    <div class="section-card mb-2">
+    <div class="filter-bar">
       <form method="GET" class="d-flex gap-2 align-items-center flex-wrap">
         <input type="hidden" name="cat"   value="<?= $catId ?>">
         <input type="hidden" name="sem"   value="<?= $semFiltro ?>">
