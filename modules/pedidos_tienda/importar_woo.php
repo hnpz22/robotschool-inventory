@@ -4,7 +4,7 @@ require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/WooSync.php';
 
-Auth::requireRol('gerencia', 'administracion');
+Auth::requirePermiso('pedidos_tienda', 'crear');
 
 $db         = Database::get();
 $pageTitle  = 'Importar desde WooCommerce';

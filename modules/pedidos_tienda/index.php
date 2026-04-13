@@ -499,7 +499,7 @@ tr.fila-sel td{background:#eff6ff!important}
     <a href="importar.php" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-upload me-1"></i>Importar CSV
     </a>
-    <?php if (Auth::isGerencia()): ?>
+    <?php if (Auth::puede('pedidos_tienda', 'crear')): ?>
     <a href="importar_woo.php" class="btn btn-primary btn-sm">
       <i class="bi bi-cloud-download me-1"></i>Importar WooCommerce
     </a>
