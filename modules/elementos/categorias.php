@@ -3,12 +3,16 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
-Auth::requireAdmin();
+Auth::requirePermiso('categorias', 'ver');
 
 $db = Database::get();
 $pageTitle  = 'Categorías de Elementos';
 $activeMenu = 'categorias';
 $error = $success = '';
+
+$puedeCrear    = Auth::puede('categorias', 'crear');
+$puedeEditar   = Auth::puede('categorias', 'editar');
+$puedeEliminar = Auth::puede('categorias', 'eliminar');
 
 // ── POST: crear / editar ──────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -23,6 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $activa      = isset($_POST['activa']) ? 1 : 0;
 
     try {
+        if ($id && !$puedeEditar)  throw new Exception('No tienes permiso para editar categorías.');
+        if (!$id && !$puedeCrear)  throw new Exception('No tienes permiso para crear categorías.');
         if (!$nombre || !$prefijo) throw new Exception('Nombre y prefijo son obligatorios.');
         if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) $color = '#3a72e8';
 
@@ -42,23 +48,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── GET: baja lógica ──────────────────────────────────────────────────────────
 if (isset($_GET['del']) && Auth::csrfVerify($_GET['csrf'] ?? '')) {
-    $delId = (int)$_GET['del'];
-    // Verificar que no tenga elementos activos asociados
-    $stEnUso = $db->prepare("SELECT COUNT(*) FROM elementos WHERE categoria_id = ? AND activo = 1");
-    $stEnUso->execute([$delId]);
-    $enUso = (int)$stEnUso->fetchColumn();
-    if ($enUso > 0) {
-        $error = "No se puede desactivar: la categoría tiene $enUso elemento(s) activo(s) asociado(s).";
+    if (!$puedeEliminar) {
+        $error = 'No tienes permiso para desactivar categorías.';
     } else {
-        $db->prepare("UPDATE categorias SET activa=0 WHERE id=?")->execute([$delId]);
-        $success = 'Categoría desactivada.';
+        $delId = (int)$_GET['del'];
+        $stEnUso = $db->prepare("SELECT COUNT(*) FROM elementos WHERE categoria_id = ? AND activo = 1");
+        $stEnUso->execute([$delId]);
+        $enUso = (int)$stEnUso->fetchColumn();
+        if ($enUso > 0) {
+            $error = "No se puede desactivar: la categoría tiene $enUso elemento(s) activo(s) asociado(s).";
+        } else {
+            $db->prepare("UPDATE categorias SET activa=0 WHERE id=?")->execute([$delId]);
+            $success = 'Categoría desactivada.';
+        }
     }
 }
 
 // ── GET: reactivar ────────────────────────────────────────────────────────────
 if (isset($_GET['act']) && Auth::csrfVerify($_GET['csrf'] ?? '')) {
-    $db->prepare("UPDATE categorias SET activa=1 WHERE id=?")->execute([(int)$_GET['act']]);
-    $success = 'Categoría reactivada.';
+    if (!$puedeEditar) {
+        $error = 'No tienes permiso para reactivar categorías.';
+    } else {
+        $db->prepare("UPDATE categorias SET activa=1 WHERE id=?")->execute([(int)$_GET['act']]);
+        $success = 'Categoría reactivada.';
+    }
 }
 
 // ── Datos ─────────────────────────────────────────────────────────────────────
@@ -74,7 +87,7 @@ $categorias = $db->query("
 
 // Cargar para edición
 $editCat = null;
-if (isset($_GET['edit'])) {
+if (isset($_GET['edit']) && $puedeEditar) {
     $editCat = $db->query("SELECT * FROM categorias WHERE id=".(int)$_GET['edit'])->fetch();
 }
 
@@ -140,14 +153,16 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             </td>
             <td>
               <div class="d-flex gap-1">
+                <?php if ($puedeEditar): ?>
                 <a href="?edit=<?= $cat['id'] ?>" class="btn btn-sm btn-outline-primary" style="padding:.2rem .4rem" title="Editar"><i class="bi bi-pencil"></i></a>
-                <?php if ($cat['activa']): ?>
+                <?php endif; ?>
+                <?php if ($cat['activa'] && $puedeEliminar): ?>
                   <a href="?del=<?= $cat['id'] ?>&csrf=<?= Auth::csrfToken() ?>"
                      class="btn btn-sm btn-outline-danger" style="padding:.2rem .4rem" title="Desactivar"
                      onclick="return confirm('¿Desactivar la categoría «<?= addslashes(htmlspecialchars($cat['nombre'])) ?>»?')">
                     <i class="bi bi-toggle-on"></i>
                   </a>
-                <?php else: ?>
+                <?php elseif (!$cat['activa'] && $puedeEditar): ?>
                   <a href="?act=<?= $cat['id'] ?>&csrf=<?= Auth::csrfToken() ?>"
                      class="btn btn-sm btn-outline-success" style="padding:.2rem .4rem" title="Reactivar">
                     <i class="bi bi-toggle-off"></i>
@@ -167,6 +182,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   </div>
 
   <!-- ── Formulario crear / editar ── -->
+  <?php if ($puedeCrear || $puedeEditar): ?>
   <div class="col-lg-4">
     <div class="section-card">
       <h6 class="fw-bold mb-3">
@@ -253,6 +269,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
       </form>
     </div>
   </div>
+  <?php endif; ?>
 
 </div>
 
@@ -260,6 +277,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 // Vista previa en tiempo real
 (function(){
   const colorInput  = document.querySelector('input[type="color"]');
+  if (!colorInput) return; // form no renderizado (sin permiso crear/editar)
   const colorHex    = document.getElementById('colorHex');
   const nombreInput = document.querySelector('input[name="nombre"]');
   const prefijoInput= document.querySelector('input[name="prefijo"]');

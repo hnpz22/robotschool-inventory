@@ -267,14 +267,16 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
     <?php endif; ?>
 
     <!-- ── ADMINISTRACION ── -->
-    <?php if (in_array('usuarios', $_menu)): ?>
+    <?php if (array_intersect(['usuarios','categorias','config'], $_menu)): ?>
     <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['usuarios','roles','categorias','config']) ? ' sidebar-divider-active' : '' ?>">ADMINISTRACI&Oacute;N</div></li>
+    <?php if (in_array('usuarios', $_menu)): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='usuarios'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/usuarios/index.php">
         <i class="bi bi-people"></i> <span>Usuarios</span>
       </a>
     </li>
+    <?php endif; ?>
     <?php if (Auth::isGerencia()): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='roles'?'active':'' ?>"
@@ -283,18 +285,22 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
       </a>
     </li>
     <?php endif; ?>
+    <?php if (in_array('categorias', $_menu)): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='categorias'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/elementos/categorias.php">
         <i class="bi bi-tags"></i> <span>Categor&iacute;as</span>
       </a>
     </li>
+    <?php endif; ?>
+    <?php if (in_array('config', $_menu)): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='config'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/auth/config.php">
         <i class="bi bi-gear"></i> <span>Configuraci&oacute;n</span>
       </a>
     </li>
+    <?php endif; ?>
     <?php endif; ?>
 
     <!-- Logout siempre -->
