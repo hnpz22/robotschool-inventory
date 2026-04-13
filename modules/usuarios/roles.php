@@ -24,6 +24,8 @@ $GRUPOS = [
     ],
     'Operaciones' => [
         'inventario'    => ['label' => 'Inventario',      'icon' => 'bi-cpu'],
+        'movimientos'   => ['label' => 'Movimientos',     'icon' => 'bi-arrow-left-right'],
+        'barcodes'      => ['label' => 'Códigos de Barras','icon' => 'bi-upc-scan'],
         'kits'          => ['label' => 'Kits',            'icon' => 'bi-bag-check'],
         'colegios'      => ['label' => 'Colegios',        'icon' => 'bi-building'],
         'categorias'    => ['label' => 'Categorías',      'icon' => 'bi-tags'],
@@ -83,6 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'guard
             $db->beginTransaction();
             $db->prepare("DELETE FROM rol_permisos WHERE rol_id=?")->execute([$rolId]);
             $postedPerms = $_POST['perms'] ?? [];
+            $ins = $db->prepare(
+                "INSERT INTO rol_permisos (rol_id,modulo,ver,crear,editar,eliminar) VALUES (?,?,?,?,?,?)"
+            );
             foreach ($allModKeys as $modulo) {
                 $ver      = isset($postedPerms[$modulo]['ver'])      ? 1 : 0;
                 $crear    = isset($postedPerms[$modulo]['crear'])    ? 1 : 0;
@@ -90,11 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'guard
                 $eliminar = isset($postedPerms[$modulo]['eliminar']) ? 1 : 0;
                 // Sin ver → sin nada
                 if (!$ver) $crear = $editar = $eliminar = 0;
-                if ($ver) {
-                    $db->prepare(
-                        "INSERT INTO rol_permisos (rol_id,modulo,ver,crear,editar,eliminar) VALUES (?,?,?,?,?,?)"
-                    )->execute([$rolId, $modulo, $ver, $crear, $editar, $eliminar]);
-                }
+                // Guardar fila explícita siempre (incluso ver=0) para distinguir "desmarcado"
+                // de "módulo nunca configurado" en menuItems/puede.
+                $ins->execute([$rolId, $modulo, $ver, $crear, $editar, $eliminar]);
             }
             $db->commit();
             auditoria('editar_permisos_rol', 'roles', $rolId, [],

@@ -3,7 +3,7 @@ require_once dirname(__DIR__, 2) . '/config/config.php';
 require_once dirname(__DIR__, 2) . '/includes/Database.php';
 require_once dirname(__DIR__, 2) . '/includes/Auth.php';
 require_once dirname(__DIR__, 2) . '/includes/helpers.php';
-Auth::check();
+Auth::requirePermiso('barcodes', 'ver');
 
 $db = Database::get();
 $pageTitle  = 'Códigos de Barras';

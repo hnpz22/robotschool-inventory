@@ -6,13 +6,13 @@ class Auth {
     // Mapa rol_id => nombre de modulos permitidos
     private static $ROL_MENUS = [
         1 => [ // gerencia
-            'dashboard','inventario','kits','colegios','pedidos_tienda',
+            'dashboard','inventario','movimientos','barcodes','kits','colegios','pedidos_tienda',
             'produccion','alistamiento','cursos','matriculas','pagos','academico',
             'comercial','convenios','reportes','usuarios','config','categorias',
             'pedidos','proveedores','despachos'
         ],
         2 => [ // administracion
-            'dashboard','inventario','kits','colegios',
+            'dashboard','inventario','movimientos','barcodes','kits','colegios',
             'pedidos_tienda','produccion','alistamiento','reportes',
             'pedidos','proveedores','despachos'
         ],
@@ -20,13 +20,13 @@ class Auth {
             'dashboard','cursos','matriculas','pagos','academico','colegios'
         ],
         4 => [ // produccion
-            'dashboard','inventario','kits','produccion','alistamiento'
+            'dashboard','inventario','movimientos','barcodes','kits','produccion','alistamiento'
         ],
         5 => [ // comercial
             'dashboard','comercial','convenios','colegios'
         ],
         6 => [ // consulta
-            'dashboard','inventario','reportes'
+            'dashboard','inventario','movimientos','reportes'
         ],
     ];
 
@@ -175,16 +175,21 @@ class Auth {
         $rolId = self::getRolId();
         static $menuCache = [];
         if (isset($menuCache[$rolId])) return $menuCache[$rolId];
+        $staticMenu = self::$ROL_MENUS[$rolId] ?? self::$ROL_MENUS[6];
         try {
-            $rows = Database::get()
-                ->query("SELECT modulo FROM rol_permisos WHERE rol_id=$rolId AND ver=1")
-                ->fetchAll(PDO::FETCH_COLUMN);
-            if (!empty($rows)) {
-                return $menuCache[$rolId] = $rows;
+            $db = Database::get();
+            $allowed = $db->query("SELECT modulo FROM rol_permisos WHERE rol_id=$rolId AND ver=1")
+                          ->fetchAll(PDO::FETCH_COLUMN);
+            $configured = $db->query("SELECT modulo FROM rol_permisos WHERE rol_id=$rolId")
+                             ->fetchAll(PDO::FETCH_COLUMN);
+            if (!empty($configured)) {
+                // Rol ya configurado: respetar explícitos + fallback estático para módulos sin fila
+                $fallback = array_diff($staticMenu, $configured);
+                return $menuCache[$rolId] = array_values(array_unique(array_merge($allowed, $fallback)));
             }
         } catch (Exception $e) {}
         // Fallback a definición estática si la tabla no existe o está vacía
-        return $menuCache[$rolId] = self::$ROL_MENUS[$rolId] ?? self::$ROL_MENUS[6];
+        return $menuCache[$rolId] = $staticMenu;
     }
 
     public static function tieneAcceso(string $modulo): bool {
@@ -205,7 +210,13 @@ class Auth {
         try {
             $val = $db->query("SELECT `$accion` FROM rol_permisos
                 WHERE rol_id=".self::getRolId()." AND modulo=".$db->quote($modulo))->fetchColumn();
-            $cache[$key] = (bool)$val;
+            // Si no hay fila para este módulo (false), caer a menú estático en vez de bloquear:
+            // evita bloquear módulos nuevos cuando el rol ya tenía otras filas configuradas.
+            if ($val === false) {
+                $cache[$key] = ($accion === 'ver') ? self::tieneAcceso($modulo) : false;
+            } else {
+                $cache[$key] = (bool)$val;
+            }
         } catch (Exception $e) {
             // Si no existe la tabla permisos, usar acceso por menu
             $cache[$key] = self::tieneAcceso($modulo);

@@ -86,7 +86,7 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
     <?php endif; ?>
 
     <!-- ── OPERACIONES (Admin, Gerencia, Produccion) ── -->
-    <?php if (array_intersect(['inventario','kits','colegios'], $_menu)): ?>
+    <?php if (array_intersect(['inventario','movimientos','barcodes','kits','colegios'], $_menu)): ?>
     <li class="nav-item"><div class="sidebar-divider<?= in_array($activeMenu??'', ['elementos','movimientos','barcodes','kits','colegios']) ? ' sidebar-divider-active' : '' ?>">OPERACIONES</div></li>
     <?php endif; ?>
 
@@ -97,12 +97,16 @@ $_nombreUser = !empty($_user['nombre']) ? $_user['nombre'] : ($_user['name'] ?? 
         <i class="bi bi-cpu"></i> <span>Elementos</span>
       </a>
     </li>
+    <?php endif; ?>
+    <?php if (in_array('movimientos', $_menu)): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='movimientos'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/inventario/movimientos.php">
         <i class="bi bi-arrow-left-right"></i> <span>Movimientos</span>
       </a>
     </li>
+    <?php endif; ?>
+    <?php if (in_array('barcodes', $_menu)): ?>
     <li class="nav-item">
       <a class="nav-link sidebar-link <?= ($activeMenu??'')==='barcodes'?'active':'' ?>"
          href="<?= APP_URL ?>/modules/barcodes/index.php">
