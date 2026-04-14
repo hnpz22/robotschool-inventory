@@ -108,7 +108,7 @@ switch ($tipo) {
         break;
 
     case 'ventas_colegios':
-        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Estudiantes','Val Kit COP','Val Linea COP','Convenio','Fecha Convenio','Estado'];
+        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Cant./Est.','Val Kit COP','Val Linea COP','Canal','Convenio/Ref','Fecha','Estado'];
         $conds = [];
         if ($estadoConv !== 'all') $conds[] = "estado_convenio = " . $db->quote($estadoConv);
         if ($colegioId)            $conds[] = "colegio_id = $colegioId";
@@ -116,7 +116,7 @@ switch ($tipo) {
         if ($fechaDesde)           $conds[] = "fecha_convenio >= '$fechaDesde'";
         if ($fechaHasta)           $conds[] = "fecha_convenio <= '$fechaHasta'";
         $where = $conds ? ('WHERE ' . implode(' AND ', $conds)) : '';
-        $datos = $db->query("SELECT colegio, ciudad, tipo_colegio, kit, nombre_curso, num_estudiantes, valor_kit, valor_linea, codigo_convenio, fecha_convenio, estado_convenio FROM v_ventas_colegios $where ORDER BY colegio, fecha_convenio DESC, kit")->fetchAll();
+        $datos = $db->query("SELECT colegio, ciudad, tipo_colegio, kit, nombre_curso, num_estudiantes, valor_kit, valor_linea, fuente, codigo_convenio, fecha_convenio, estado_convenio FROM v_ventas_colegios $where ORDER BY colegio, fecha_convenio DESC, kit")->fetchAll();
         break;
 
     case 'financiero':

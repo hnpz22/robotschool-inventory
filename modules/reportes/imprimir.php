@@ -137,7 +137,7 @@ switch ($tipo) {
     case 'ventas_colegios':
         $titulo_reporte = 'Ventas de Kits por Colegio';
         $subtitulo = 'Del ' . date('d/m/Y', strtotime($fechaDesde)) . ' al ' . date('d/m/Y', strtotime($fechaHasta));
-        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Estudiantes','Val. Kit','Val. Línea','Convenio','Fecha'];
+        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Cant./Est.','Val. Kit','Val. Línea','Canal','Convenio/Ref','Fecha'];
         $conds = [];
         if ($estadoConv !== 'all') $conds[] = "estado_convenio = " . $db->quote($estadoConv);
         if ($colegioId)            $conds[] = "colegio_id = $colegioId";
@@ -568,7 +568,7 @@ $logo_b64 = file_exists($logo_path) ? 'data:image/png;base64,' . base64_encode(f
           if ($r['colegio'] !== $col_actual):
             if ($col_actual !== ''): ?>
         <tr class="subtotal-row">
-          <td colspan="9" style="text-align:right;">Subtotal <?= htmlspecialchars($col_actual) ?>: <?= number_format($sub_est,0,',','.') ?> est. &mdash;</td>
+          <td colspan="10" style="text-align:right;">Subtotal <?= htmlspecialchars($col_actual) ?>: <?= number_format($sub_est,0,',','.') ?> uds. &mdash;</td>
           <td class="num">$<?= number_format($sub_val,0,',','.') ?></td>
         </tr>
         <?php   endif;
@@ -580,6 +580,7 @@ $logo_b64 = file_exists($logo_path) ? 'data:image/png;base64,' . base64_encode(f
           $sub_est += $r['num_estudiantes'];
           $sub_val += $r['valor_linea'];
         ?>
+        <?php $es_tienda = ($r['fuente'] ?? 'convenio') === 'tienda'; ?>
         <tr>
           <td><?= htmlspecialchars($r['colegio']) ?></td>
           <td style="font-size:7.5pt;color:#64748b;"><?= htmlspecialchars($r['ciudad'] ?? '') ?></td>
@@ -589,13 +590,14 @@ $logo_b64 = file_exists($logo_path) ? 'data:image/png;base64,' . base64_encode(f
           <td class="num"><?= number_format($r['num_estudiantes'],0,',','.') ?></td>
           <td class="num"><?= $r['valor_kit'] ? '$'.number_format($r['valor_kit'],0,',','.') : '&mdash;' ?></td>
           <td class="num"><strong><?= $r['valor_linea'] ? '$'.number_format($r['valor_linea'],0,',','.') : '&mdash;' ?></strong></td>
+          <td style="font-size:7pt;"><?= $es_tienda ? 'Tienda' : 'Conv.' ?></td>
           <td style="font-size:7.5pt;"><?= htmlspecialchars($r['codigo_convenio'] ?? '') ?></td>
           <td style="font-size:7.5pt;"><?= $r['fecha_convenio'] ? date('d/m/Y', strtotime($r['fecha_convenio'])) : '' ?></td>
         </tr>
       <?php endforeach; ?>
       <?php if ($col_actual): ?>
         <tr class="subtotal-row">
-          <td colspan="9" style="text-align:right;">Subtotal <?= htmlspecialchars($col_actual) ?>: <?= number_format($sub_est,0,',','.') ?> est. &mdash;</td>
+          <td colspan="10" style="text-align:right;">Subtotal <?= htmlspecialchars($col_actual) ?>: <?= number_format($sub_est,0,',','.') ?> uds. &mdash;</td>
           <td class="num">$<?= number_format($sub_val,0,',','.') ?></td>
         </tr>
         <tr class="total-row">
@@ -603,7 +605,7 @@ $logo_b64 = file_exists($logo_path) ? 'data:image/png;base64,' . base64_encode(f
           <td class="num"><?= number_format($vc_estudiantes,0,',','.') ?></td>
           <td></td>
           <td class="num">$<?= number_format($vc_total,0,',','.') ?></td>
-          <td colspan="2"></td>
+          <td colspan="3"></td>
         </tr>
       <?php endif; ?>
 

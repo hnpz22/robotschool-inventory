@@ -35,7 +35,7 @@ $pedidos    = $db->query("SELECT id, codigo_pedido, fecha_pedido, estado FROM pe
 $categorias = $db->query("SELECT id, nombre, prefijo FROM categorias WHERE activa=1 ORDER BY nombre")->fetchAll();
 $proveedores= $db->query("SELECT id, nombre FROM proveedores WHERE activo=1 ORDER BY nombre")->fetchAll();
 $colegios_list = $db->query("SELECT id, nombre FROM colegios WHERE activo=1 ORDER BY nombre")->fetchAll();
-$kits_list     = $db->query("SELECT DISTINCT nombre_kit FROM convenio_cursos WHERE nombre_kit IS NOT NULL AND nombre_kit != '' ORDER BY nombre_kit")->fetchAll();
+$kits_list     = $db->query("SELECT DISTINCT kit_nombre AS nombre_kit FROM (SELECT nombre_kit AS kit_nombre FROM convenio_cursos WHERE nombre_kit IS NOT NULL AND nombre_kit != '' UNION SELECT kit_nombre FROM tienda_pedidos WHERE kit_nombre IS NOT NULL AND kit_nombre != '' AND colegio_id IS NOT NULL) t ORDER BY kit_nombre")->fetchAll();
 
 // ── Ejecutar reporte según tipo ──
 $datos = [];
@@ -172,7 +172,7 @@ switch ($tipo) {
     // ─────────────────────────────────────────────
     case 'ventas_colegios':
         $titulo_reporte = 'Ventas de Kits por Colegio';
-        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Estudiantes','Val. Kit','Val. Línea','Convenio','Fecha'];
+        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Cant./Est.','Val. Kit','Val. Línea','Canal','Convenio/Ref','Fecha'];
 
         $conds = [];
         if ($estadoConv !== 'all') $conds[] = "estado_convenio = " . $db->quote($estadoConv);
@@ -685,16 +685,16 @@ function aplicarAnio(anio) {
           if ($r['colegio'] !== $col_actual):
             if ($col_actual !== ''): ?>
         <tr style="background:#f0fdf4;">
-          <td colspan="10" class="text-end fw-bold small" style="color:#166534;padding:.35rem .75rem;">
+          <td colspan="11" class="text-end fw-bold small" style="color:#166534;padding:.35rem .75rem;">
             Subtotal <?= htmlspecialchars($col_actual) ?>:
-            <?= number_format($sub_est,0,',','.') ?> estudiantes &mdash;
+            <?= number_format($sub_est,0,',','.') ?> uds. &mdash;
             $<?= number_format($sub_val,0,',','.') ?> COP
           </td>
         </tr>
         <?php endif;
             $col_actual = $r['colegio']; $sub_est = 0; $sub_val = 0; ?>
         <tr style="background:#f8fafc;">
-          <td colspan="10" class="fw-bold small" style="color:#1e293b;padding:.4rem .75rem;">
+          <td colspan="11" class="fw-bold small" style="color:#1e293b;padding:.4rem .75rem;">
             <i class="bi bi-building me-1 text-primary"></i>
             <?= htmlspecialchars($r['colegio']) ?>
             <?php if ($r['ciudad']): ?><span class="text-muted fw-normal"> · <?= htmlspecialchars($r['ciudad']) ?></span><?php endif; ?>
@@ -704,6 +704,7 @@ function aplicarAnio(anio) {
           $sub_est += $r['num_estudiantes'];
           $sub_val += $r['valor_linea'];
         ?>
+        <?php $es_tienda = ($r['fuente'] ?? 'convenio') === 'tienda'; ?>
         <tr>
           <td class="fw-semibold"><?= htmlspecialchars($r['colegio']) ?></td>
           <td class="text-muted small"><?= htmlspecialchars($r['ciudad'] ?? '&mdash;') ?></td>
@@ -713,15 +714,20 @@ function aplicarAnio(anio) {
           <td class="text-center fw-bold"><?= number_format($r['num_estudiantes'],0,',','.') ?></td>
           <td class="text-end"><?= $r['valor_kit'] ? '$'.number_format($r['valor_kit'],0,',','.') : '&mdash;' ?></td>
           <td class="text-end fw-semibold"><?= $r['valor_linea'] ? '$'.number_format($r['valor_linea'],0,',','.') : '&mdash;' ?></td>
+          <td>
+            <span class="badge" style="font-size:.62rem;padding:.2rem .5rem;background:<?= $es_tienda?'#dbeafe':'#dcfce7' ?>;color:<?= $es_tienda?'#1d4ed8':'#16a34a' ?>;">
+              <?= $es_tienda ? 'Tienda' : 'Conv.' ?>
+            </span>
+          </td>
           <td class="text-muted small"><?= htmlspecialchars($r['codigo_convenio'] ?? '&mdash;') ?></td>
           <td class="text-muted small"><?= $r['fecha_convenio'] ? date('d/m/Y', strtotime($r['fecha_convenio'])) : '&mdash;' ?></td>
         </tr>
         <?php endforeach; ?>
         <?php if ($col_actual): ?>
         <tr style="background:#f0fdf4;">
-          <td colspan="10" class="text-end fw-bold small" style="color:#166534;padding:.35rem .75rem;">
+          <td colspan="11" class="text-end fw-bold small" style="color:#166534;padding:.35rem .75rem;">
             Subtotal <?= htmlspecialchars($col_actual) ?>:
-            <?= number_format($sub_est,0,',','.') ?> estudiantes &mdash;
+            <?= number_format($sub_est,0,',','.') ?> uds. &mdash;
             $<?= number_format($sub_val,0,',','.') ?> COP
           </td>
         </tr>
@@ -730,7 +736,7 @@ function aplicarAnio(anio) {
           <td class="text-center fw-bold"><?= number_format($stats['estudiantes'],0,',','.') ?></td>
           <td></td>
           <td class="text-end fw-bold">$<?= number_format($stats['total_valor'],0,',','.') ?></td>
-          <td colspan="2"></td>
+          <td colspan="3"></td>
         </tr>
         <?php endif; ?>
 
