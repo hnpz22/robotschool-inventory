@@ -13,7 +13,7 @@
 - **CSRF en todo POST:** `Auth::csrfToken()` en el form, `Auth::csrfVerify()` al procesar
 - **Auditoría en operaciones importantes:** `auditoria('accion', 'tabla', $id, $antes, $despues)`
 - **Migraciones:** crear `database/migration_vX.X.sql` — nunca editar `database/seed.sql`
-- **Deploy:** `git fetch origin && git reset --hard origin/main` en servidor — no requiere restart
+- **Deploy:** `git pull origin main` en servidor — no requiere restart. **NUNCA usar `git reset --hard`** — el servidor tiene cambios locales no commiteados en `docker-compose.yml` y `docker/nginx/conf.d/robotschool.conf` (SSL + Crafty). Un hard reset los destruiría.
 
 ## Contexto de negocio
 
