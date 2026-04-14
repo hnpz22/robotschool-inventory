@@ -10,7 +10,7 @@ $pageTitle  = 'Reportes de Inventario';
 $activeMenu = 'reportes';
 
 // ── Parámetros del reporte ──
-$tipo       = $_GET['tipo']      ?? 'inventario';
+$tipo       = $_GET['tipo']      ?? 'dashboard';
 $fechaDesde = $_GET['desde']     ?? date('Y-m-01');
 $fechaHasta = $_GET['hasta']     ?? date('Y-m-d');
 $pedidoId   = (int)($_GET['pedido_id'] ?? 0);
@@ -43,6 +43,80 @@ $columnas = [];
 $titulo_reporte = '';
 
 switch ($tipo) {
+
+    // ─────────────────────────────────────────────
+    // 0. DASHBOARD EJECUTIVO
+    // ─────────────────────────────────────────────
+    case 'dashboard':
+        $titulo_reporte = 'Dashboard Ejecutivo';
+        $columnas = [];
+        $datos    = [];
+
+        $d_revenue = $db->query("
+            SELECT
+                SUM(CASE WHEN mes = DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_cop ELSE 0 END)                       AS total_mes,
+                SUM(CASE WHEN mes LIKE CONCAT(YEAR(CURDATE()),'-%') THEN total_cop ELSE 0 END)                      AS total_anio,
+                SUM(CASE WHEN fuente='tienda'    AND mes = DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_cop ELSE 0 END) AS tienda_mes,
+                SUM(CASE WHEN fuente='tienda'    AND mes LIKE CONCAT(YEAR(CURDATE()),'-%') THEN total_cop ELSE 0 END) AS tienda_anio,
+                SUM(CASE WHEN fuente='convenios' AND mes = DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_cop ELSE 0 END) AS conv_mes,
+                SUM(CASE WHEN fuente='convenios' AND mes LIKE CONCAT(YEAR(CURDATE()),'-%') THEN total_cop ELSE 0 END) AS conv_anio,
+                SUM(CASE WHEN fuente='escuela'   AND mes = DATE_FORMAT(CURDATE(),'%Y-%m') THEN total_cop ELSE 0 END) AS esc_mes,
+                SUM(CASE WHEN fuente='escuela'   AND mes LIKE CONCAT(YEAR(CURDATE()),'-%') THEN total_cop ELSE 0 END) AS esc_anio
+            FROM v_ingresos_mensuales
+        ")->fetch();
+
+        $d_pipeline = $db->query("
+            SELECT
+                SUM(CASE WHEN estado='pendiente' THEN 1 ELSE 0 END)                                                                        AS pendiente,
+                SUM(CASE WHEN estado IN ('aprobado','en_produccion','listo_produccion','en_alistamiento','listo_envio') THEN 1 ELSE 0 END)   AS en_proceso,
+                SUM(CASE WHEN estado='despachado' THEN 1 ELSE 0 END)                                                                       AS despachado,
+                SUM(CASE WHEN estado='entregado'  THEN 1 ELSE 0 END)                                                                       AS entregado,
+                SUM(CASE WHEN estado NOT IN ('entregado','cancelado','despachado') THEN 1 ELSE 0 END)                                       AS activos,
+                SUM(CASE WHEN YEAR(fecha_compra)=YEAR(CURDATE()) AND estado != 'cancelado' THEN 1 ELSE 0 END)                               AS total_anio,
+                ROUND(AVG(CASE WHEN estado='entregado' AND fecha_entrega IS NOT NULL THEN DATEDIFF(fecha_entrega,fecha_compra) END),1)       AS dias_promedio
+            FROM tienda_pedidos
+        ")->fetch();
+
+        $d_convenios = $db->query("
+            SELECT
+                SUM(CASE WHEN estado IN ('aprobado','vigente') THEN 1 ELSE 0 END) AS activos,
+                SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END)             AS pendientes,
+                COUNT(*)                                                           AS total_anio
+            FROM convenios
+            WHERE YEAR(fecha_convenio) = YEAR(CURDATE()) AND activo = 1
+        ")->fetch();
+
+        $d_top_colegios = $db->query("
+            SELECT colegio AS nombre, COUNT(*) AS operaciones, SUM(valor_linea) AS total
+            FROM v_ventas_colegios
+            WHERE YEAR(fecha_convenio) = YEAR(CURDATE())
+              AND estado_convenio != 'rechazado'
+              AND colegio IS NOT NULL AND colegio != ''
+            GROUP BY colegio
+            ORDER BY total DESC
+            LIMIT 6
+        ")->fetchAll();
+
+        $d_tendencia_raw = $db->query("
+            SELECT mes, fuente, SUM(total_cop) AS total
+            FROM v_ingresos_mensuales
+            WHERE mes >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH),'%Y-%m')
+            GROUP BY mes, fuente
+            ORDER BY mes ASC, fuente
+        ")->fetchAll();
+        // Organizar tendencia por mes
+        $d_meses = []; $d_tend = [];
+        foreach ($d_tendencia_raw as $r) {
+            $d_meses[$r['mes']] = true;
+            $d_tend[$r['mes']][$r['fuente']] = (float)$r['total'];
+        }
+        ksort($d_meses); ksort($d_tend);
+        $d_max_mes = 1;
+        foreach ($d_tend as $m => $fuentes) {
+            $tot = array_sum($fuentes);
+            if ($tot > $d_max_mes) $d_max_mes = $tot;
+        }
+        break;
 
     // ─────────────────────────────────────────────
     // 1. INVENTARIO GENERAL (con semáforo)
@@ -275,6 +349,52 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 .tipo-transferencia{ background: #dbeafe; color: #2563eb; }
 .cat-pill { font-size: .7rem; padding: .15rem .5rem; border-radius: 20px; color: #fff; font-weight: 600; }
 .print-btn { display: none; }
+/* ── Dashboard ejecutivo ── */
+.dash-grid   { display:grid; gap:.85rem; }
+.dash-kpis   { grid-template-columns: repeat(4,1fr); }
+.dash-canales{ grid-template-columns: repeat(3,1fr); }
+.dash-bottom { grid-template-columns: 1.6fr 1fr; }
+@media(max-width:960px){ .dash-kpis{grid-template-columns:repeat(2,1fr)} .dash-canales{grid-template-columns:1fr 1fr} .dash-bottom{grid-template-columns:1fr} }
+@media(max-width:560px){ .dash-kpis{grid-template-columns:1fr} .dash-canales{grid-template-columns:1fr} }
+.dk-card  { background:#fff; border:1px solid var(--rs-gray-200); border-radius:var(--rs-radius); padding:1rem 1.15rem; display:flex; flex-direction:column; gap:.2rem; transition:.15s; }
+.dk-card:hover { box-shadow:0 4px 18px rgba(0,0,0,.07); }
+.dk-icon  { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.05rem; margin-bottom:.3rem; flex-shrink:0; }
+.dk-val   { font-size:1.6rem; font-weight:800; line-height:1; color:#0f172a; }
+.dk-val.md{ font-size:1.25rem; }
+.dk-lbl   { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--rs-text-muted); margin-top:.1rem; }
+.dk-sub   { font-size:.71rem; color:var(--rs-text-muted); margin-top:.15rem; }
+.dk-sep   { width:100%; height:1px; background:var(--rs-gray-100); margin:.45rem 0; }
+.dk-row   { display:flex; align-items:center; justify-content:space-between; font-size:.78rem; }
+.dk-row-lbl{ color:var(--rs-text-muted); }
+.dk-row-val{ font-weight:700; }
+/* Canal cards */
+.canal-card { background:#fff; border:1px solid var(--rs-gray-200); border-radius:var(--rs-radius); padding:.9rem 1rem; border-top:3px solid; }
+.canal-card .dk-val { font-size:1.15rem; }
+/* Pipeline strip */
+.dk-pipeline { background:#fff; border:1px solid var(--rs-gray-200); border-radius:var(--rs-radius); padding:.85rem 1.1rem; }
+.dk-pipe-flow{ display:flex; gap:0; overflow-x:auto; padding:.2rem 0; }
+.dk-pipe-step{ flex:1; min-width:64px; text-align:center; padding:.5rem .25rem; border-radius:8px; text-decoration:none; transition:.12s; border:1.5px solid transparent; }
+.dk-pipe-step:hover { background:var(--rs-gray-100); }
+.dk-pipe-count{ font-size:1.3rem; font-weight:800; line-height:1; }
+.dk-pipe-lbl  { font-size:.6rem; font-weight:600; color:var(--rs-text-muted); text-transform:uppercase; letter-spacing:.03em; margin-top:.2rem; line-height:1.2; }
+.dk-pipe-arr  { color:var(--rs-gray-300); display:flex; align-items:center; padding:0 .05rem; align-self:center; margin-top:-.5rem; font-size:.9rem; flex-shrink:0; }
+/* Tendencia */
+.dk-panel { background:#fff; border:1px solid var(--rs-gray-200); border-radius:var(--rs-radius); padding:.85rem 1.1rem; }
+.dk-panel-title { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--rs-text-muted); margin-bottom:.8rem; }
+.trend-chart  { display:flex; align-items:flex-end; gap:.45rem; height:110px; }
+.trend-col    { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; min-width:28px; }
+.trend-bars   { flex:1; width:100%; display:flex; flex-direction:column; justify-content:flex-end; gap:1px; }
+.trend-bar    { width:100%; border-radius:2px 2px 0 0; min-height:2px; transition:height .4s; }
+.trend-mes    { font-size:.6rem; color:var(--rs-text-muted); margin-top:4px; text-align:center; white-space:nowrap; }
+/* Top colegios */
+.top-row  { display:flex; align-items:center; gap:.5rem; padding:.35rem 0; border-bottom:1px solid var(--rs-gray-100); }
+.top-row:last-child { border-bottom:none; }
+.top-rank { width:20px; height:20px; border-radius:50%; font-size:.65rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--rs-gray-100); color:var(--rs-text-muted); }
+.top-rank.gold{ background:#fef9c3; color:#854d0e; }
+.top-rank.silver{ background:#f1f5f9; color:#475569; }
+.top-name { flex:1; font-size:.78rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.top-val  { font-size:.75rem; font-weight:700; color:#16a34a; white-space:nowrap; }
+.top-ops  { font-size:.63rem; color:var(--rs-text-muted); }
 @media print {
   .filter-bar, .sidebar, .topbar, .no-print { display: none !important; }
   .print-btn { display: inline; }
@@ -312,6 +432,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     <div class="col-12 col-md-3 filter-group">
       <label>Tipo de Reporte</label>
       <select name="tipo" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="dashboard"    <?= $tipo==='dashboard'    ?'selected':'' ?>>&#x1F4CA; Dashboard Ejecutivo</option>
         <option value="inventario"   <?= $tipo==='inventario'   ?'selected':'' ?>>&#x1F4E6; Inventario General</option>
         <option value="importacion"  <?= $tipo==='importacion'  ?'selected':'' ?>>&#x2708;&#xFE0F; Por Importación</option>
         <option value="fechas"       <?= $tipo==='fechas'       ?'selected':'' ?>>&#x1F4C5; Por Fechas (Movimientos)</option>
@@ -505,6 +626,213 @@ function aplicarAnio(anio) {
   <?php endif; ?>
 </div>
 <?php endif; ?>
+
+<!-- ── DASHBOARD EJECUTIVO ── -->
+<?php if ($tipo === 'dashboard'): ?>
+<?php
+$anio_actual = date('Y');
+$mes_label   = strftime('%B', mktime(0,0,0,date('m'),1,date('Y')));
+$canal_cfg   = [
+    'tienda'    => ['label'=>'Tienda Online',        'color'=>'#2563eb', 'icon'=>'bi-bag'],
+    'convenios' => ['label'=>'Convenios Colegios',   'color'=>'#16a34a', 'icon'=>'bi-building'],
+    'escuela'   => ['label'=>'Escuela / Matrículas', 'color'=>'#7c3aed', 'icon'=>'bi-mortarboard'],
+];
+$pipe_cfg = [
+    'pendiente'  => ['lbl'=>'Pendiente',   'color'=>'#854d0e', 'key'=>'pendiente'],
+    'en_proceso' => ['lbl'=>'En Proceso',  'color'=>'#1d4ed8', 'key'=>'en_proceso'],
+    'despachado' => ['lbl'=>'Despachado',  'color'=>'#14532d', 'key'=>'despachado'],
+    'entregado'  => ['lbl'=>'Entregado',   'color'=>'#475569', 'key'=>'entregado'],
+];
+?>
+
+<!-- Fila 1: KPIs -->
+<div class="dash-grid dash-kpis mb-3">
+
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#dbeafe;color:#1d4ed8"><i class="bi bi-graph-up-arrow"></i></div>
+    <div class="dk-val md">$<?= number_format((float)$d_revenue['total_mes']/1000000,2,',','.') ?>M</div>
+    <div class="dk-lbl">Ingresos <?= ucfirst($mes_label) ?></div>
+    <div class="dk-sep"></div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Año <?= $anio_actual ?></span>
+      <span class="dk-row-val" style="color:#1d4ed8">$<?= number_format((float)$d_revenue['total_anio']/1000000,2,',','.') ?>M</span>
+    </div>
+  </div>
+
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#dcfce7;color:#16a34a"><i class="bi bi-building"></i></div>
+    <div class="dk-val"><?= (int)$d_convenios['activos'] ?></div>
+    <div class="dk-lbl">Convenios activos <?= $anio_actual ?></div>
+    <div class="dk-sep"></div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Pendientes</span>
+      <span class="dk-row-val" style="color:#b45309"><?= (int)$d_convenios['pendientes'] ?></span>
+    </div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Total firmados</span>
+      <span class="dk-row-val"><?= (int)$d_convenios['total_anio'] ?></span>
+    </div>
+  </div>
+
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#ffedd5;color:#9a3412"><i class="bi bi-box-seam"></i></div>
+    <div class="dk-val"><?= (int)$d_pipeline['activos'] ?></div>
+    <div class="dk-lbl">Pipeline tienda activo</div>
+    <div class="dk-sep"></div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Pendientes</span>
+      <span class="dk-row-val" style="color:#b45309"><?= (int)$d_pipeline['pendiente'] ?></span>
+    </div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Pedidos año</span>
+      <span class="dk-row-val"><?= (int)$d_pipeline['total_anio'] ?></span>
+    </div>
+  </div>
+
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#faf5ff;color:#7c3aed"><i class="bi bi-patch-check-fill"></i></div>
+    <div class="dk-val"><?= (int)$d_pipeline['entregado'] ?></div>
+    <div class="dk-lbl">Entregados (total)</div>
+    <div class="dk-sep"></div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Prom. entrega</span>
+      <span class="dk-row-val" style="color:#7c3aed"><?= $d_pipeline['dias_promedio'] ? $d_pipeline['dias_promedio'].' días' : '—' ?></span>
+    </div>
+    <div class="dk-row">
+      <span class="dk-row-lbl">Despachados</span>
+      <span class="dk-row-val"><?= (int)$d_pipeline['despachado'] ?></span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Fila 2: canales -->
+<div class="dash-grid dash-canales mb-3">
+  <?php foreach ($canal_cfg as $key => $canal):
+    $v_mes  = (float)($d_revenue[$key.'_mes']  ?? 0);
+    $v_anio = (float)($d_revenue[$key.'_anio'] ?? 0);
+    $pct    = $d_revenue['total_anio'] > 0 ? round(($v_anio / $d_revenue['total_anio']) * 100) : 0;
+  ?>
+  <div class="canal-card" style="border-top-color:<?= $canal['color'] ?>">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem">
+      <div class="dk-icon" style="background:<?= $canal['color'] ?>18;color:<?= $canal['color'] ?>;width:28px;height:28px;font-size:.85rem">
+        <i class="bi <?= $canal['icon'] ?>"></i>
+      </div>
+      <span style="font-size:.73rem;font-weight:700;color:var(--rs-text-muted);text-transform:uppercase;letter-spacing:.04em"><?= $canal['label'] ?></span>
+    </div>
+    <div class="dk-val md">$<?= number_format($v_mes/1000000,2,',','.') ?>M</div>
+    <div class="dk-sub">este mes</div>
+    <div class="dk-sep"></div>
+    <div class="dk-row" style="margin-bottom:.3rem">
+      <span class="dk-row-lbl">Año <?= $anio_actual ?></span>
+      <span class="dk-row-val" style="color:<?= $canal['color'] ?>">$<?= number_format($v_anio/1000000,2,',','.') ?>M</span>
+    </div>
+    <div style="height:5px;background:var(--rs-gray-100);border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:<?= $pct ?>%;background:<?= $canal['color'] ?>;border-radius:3px"></div>
+    </div>
+    <div style="font-size:.63rem;color:var(--rs-text-muted);margin-top:.2rem"><?= $pct ?>% del ingreso total</div>
+  </div>
+  <?php endforeach; ?>
+</div>
+
+<!-- Pipeline tienda -->
+<div class="dk-pipeline mb-3">
+  <div class="dk-panel-title"><i class="bi bi-diagram-3 me-1"></i>Pipeline tienda — estado actual</div>
+  <div class="dk-pipe-flow">
+    <?php $psteps = [
+      ['lbl'=>'Pendiente',   'color'=>'#854d0e', 'val'=>(int)$d_pipeline['pendiente'],  'url'=>APP_URL.'/modules/pedidos_tienda/?estado=pendiente'],
+      ['lbl'=>'En proceso',  'color'=>'#1d4ed8', 'val'=>(int)$d_pipeline['en_proceso'], 'url'=>APP_URL.'/modules/pedidos_tienda/?estado=aprobado'],
+      ['lbl'=>'Despachado',  'color'=>'#14532d', 'val'=>(int)$d_pipeline['despachado'], 'url'=>APP_URL.'/modules/pedidos_tienda/?estado=despachado'],
+      ['lbl'=>'Entregado',   'color'=>'#475569', 'val'=>(int)$d_pipeline['entregado'],  'url'=>APP_URL.'/modules/pedidos_tienda/?estado=entregado'],
+    ];
+    foreach ($psteps as $i => $ps): ?>
+    <a href="<?= htmlspecialchars($ps['url']) ?>" class="dk-pipe-step" target="_blank" style="color:<?= $ps['color'] ?>">
+      <div class="dk-pipe-count" style="color:<?= $ps['val'] > 0 ? $ps['color'] : '#cbd5e1' ?>"><?= $ps['val'] ?></div>
+      <div class="dk-pipe-lbl"><?= $ps['lbl'] ?></div>
+    </a>
+    <?php if ($i < count($psteps)-1): ?><div class="dk-pipe-arr">›</div><?php endif; ?>
+    <?php endforeach; ?>
+    <div style="flex:1;min-width:1px"></div>
+    <div class="dk-pipe-step" style="color:#7c3aed;border-color:transparent">
+      <div class="dk-pipe-count" style="color:#7c3aed;font-size:1rem"><?= (int)$d_pipeline['total_anio'] ?></div>
+      <div class="dk-pipe-lbl">Total año</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tendencia + Top colegios -->
+<div class="dash-grid dash-bottom mb-3">
+
+  <!-- Tendencia últimos 6 meses -->
+  <div class="dk-panel">
+    <div class="dk-panel-title"><i class="bi bi-bar-chart-line me-1"></i>Ingresos — últimos 6 meses</div>
+    <?php if (empty($d_tend)): ?>
+      <p class="text-muted small mb-0">Sin datos de ingresos registrados.</p>
+    <?php else: ?>
+    <div style="display:flex;gap:.3rem;margin-bottom:.5rem">
+      <?php foreach ($canal_cfg as $k => $c): ?>
+      <span style="font-size:.64rem;font-weight:600;color:<?= $c['color'] ?>">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:<?= $c['color'] ?>;margin-right:2px"></span>
+        <?= $c['label'] ?>
+      </span>
+      <?php endforeach; ?>
+    </div>
+    <div class="trend-chart">
+      <?php foreach (array_keys($d_meses) as $mes):
+        $vals  = $d_tend[$mes] ?? [];
+        $total = array_sum($vals);
+        $pct_h = $d_max_mes > 0 ? max(4, round(($total/$d_max_mes)*100)) : 4;
+        $dt    = DateTime::createFromFormat('Y-m', $mes);
+        $label = $dt ? strtoupper(substr($dt->format('M'), 0, 3)) : $mes;
+      ?>
+      <div class="trend-col">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:100%;gap:1px">
+          <?php foreach (['escuela','convenios','tienda'] as $f):
+            $v = $vals[$f] ?? 0;
+            $ph = $total > 0 ? max(2, round(($v/$total)*$pct_h)) : 0;
+            $col = $canal_cfg[$f]['color'] ?? '#94a3b8';
+          ?>
+          <?php if ($ph > 0): ?>
+          <div title="<?= $canal_cfg[$f]['label'] ?>: $<?= number_format($v/1000000,2,',','.') ?>M"
+               style="height:<?= $ph ?>px;background:<?= $col ?>;border-radius:2px 2px 0 0;opacity:.85"></div>
+          <?php endif; ?>
+          <?php endforeach; ?>
+        </div>
+        <div class="trend-mes"><?= $label ?></div>
+        <div style="font-size:.58rem;color:var(--rs-text-muted);text-align:center">$<?= number_format($total/1000000,1,',','.') ?>M</div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Top colegios -->
+  <div class="dk-panel">
+    <div class="dk-panel-title"><i class="bi bi-building me-1"></i>Top colegios — <?= $anio_actual ?></div>
+    <?php if (empty($d_top_colegios)): ?>
+      <p class="text-muted small mb-0">Sin ventas registradas este año.</p>
+    <?php else:
+      $max_c = max(array_column($d_top_colegios,'total')) ?: 1;
+      foreach ($d_top_colegios as $i => $c):
+    ?>
+    <div class="top-row">
+      <div class="top-rank <?= $i===0?'gold':($i===1?'silver':'') ?>"><?= $i+1 ?></div>
+      <div style="flex:1;min-width:0">
+        <div class="top-name" title="<?= htmlspecialchars($c['nombre']) ?>"><?= htmlspecialchars($c['nombre']) ?></div>
+        <div style="height:3px;background:var(--rs-gray-100);border-radius:2px;margin-top:3px;overflow:hidden">
+          <div style="height:100%;width:<?= round(($c['total']/$max_c)*100) ?>%;background:#16a34a;border-radius:2px"></div>
+        </div>
+      </div>
+      <div style="text-align:right;min-width:80px">
+        <div class="top-val">$<?= number_format($c['total'],0,',','.') ?></div>
+        <div class="top-ops"><?= $c['operaciones'] ?> operaciones</div>
+      </div>
+    </div>
+    <?php endforeach; endif; ?>
+  </div>
+
+</div>
+<?php endif; // fin dashboard ?>
 
 <!-- ── TABLA PRINCIPAL ── -->
 <div class="section-card p-0" style="overflow:hidden;">
