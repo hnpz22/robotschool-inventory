@@ -245,23 +245,99 @@ switch ($tipo) {
     // 6. VENTAS DE KITS POR COLEGIO
     // ─────────────────────────────────────────────
     case 'ventas_colegios':
-        $titulo_reporte = 'Ventas de Kits por Colegio';
-        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Cant./Est.','Val. Kit','Val. Línea','Canal','Convenio/Ref','Fecha'];
-
+        $columnas = [];
         $conds = [];
         if ($estadoConv !== 'all') $conds[] = "estado_convenio = " . $db->quote($estadoConv);
-        if ($colegioId)            $conds[] = "colegio_id = $colegioId";
         if ($kitNombre)            $conds[] = "kit = " . $db->quote($kitNombre);
         if ($fechaDesde)           $conds[] = "fecha_convenio >= '$fechaDesde'";
         if ($fechaHasta)           $conds[] = "fecha_convenio <= '$fechaHasta'";
 
-        $where = $conds ? ('WHERE ' . implode(' AND ', $conds)) : '';
+        if ($colegioId) {
+            // ── MODO DASHBOARD: colegio específico ──
+            $vc_info = $db->query("SELECT nombre, ciudad, tipo, telefono, email FROM colegios WHERE id = $colegioId")->fetch();
+            $titulo_reporte = 'Dashboard — ' . htmlspecialchars($vc_info['nombre'] ?? 'Colegio');
 
-        $datos = $db->query("
-            SELECT * FROM v_ventas_colegios
-            $where
-            ORDER BY colegio, fecha_convenio DESC, kit
-        ")->fetchAll();
+            $vc_kpis = $db->query("
+                SELECT
+                    COUNT(*) AS lineas,
+                    COALESCE(SUM(num_estudiantes), 0)   AS estudiantes,
+                    COALESCE(SUM(valor_linea), 0)        AS total_cop,
+                    COUNT(CASE WHEN fuente='tienda'    THEN 1 END) AS lineas_tienda,
+                    COUNT(CASE WHEN fuente='convenio'  THEN 1 END) AS lineas_conv,
+                    COALESCE(SUM(CASE WHEN fuente='tienda'   THEN valor_linea ELSE 0 END), 0) AS total_tienda,
+                    COALESCE(SUM(CASE WHEN fuente='convenio' THEN valor_linea ELSE 0 END), 0) AS total_conv,
+                    MIN(fecha_convenio) AS primera_compra,
+                    MAX(fecha_convenio) AS ultima_compra,
+                    COUNT(DISTINCT YEAR(fecha_convenio)) AS anios_cliente
+                FROM v_ventas_colegios
+                WHERE colegio_id = $colegioId AND estado_convenio != 'rechazado'
+            ")->fetch();
+
+            $vc_kits = $db->query("
+                SELECT kit, fuente,
+                    COALESCE(SUM(num_estudiantes), 0) AS estudiantes,
+                    COALESCE(SUM(valor_linea), 0)     AS total,
+                    COUNT(*) AS operaciones,
+                    MAX(fecha_convenio) AS ultima_vez
+                FROM v_ventas_colegios
+                WHERE colegio_id = $colegioId AND estado_convenio != 'rechazado'
+                  AND kit IS NOT NULL AND kit != ''
+                GROUP BY kit, fuente
+                ORDER BY total DESC
+            ")->fetchAll();
+
+            $vc_tendencia_raw = $db->query("
+                SELECT YEAR(fecha_convenio) AS anio, fuente,
+                    COALESCE(SUM(valor_linea), 0) AS total,
+                    COALESCE(SUM(num_estudiantes), 0) AS estudiantes,
+                    COUNT(*) AS operaciones
+                FROM v_ventas_colegios
+                WHERE colegio_id = $colegioId AND estado_convenio != 'rechazado'
+                GROUP BY YEAR(fecha_convenio), fuente
+                ORDER BY anio ASC
+            ")->fetchAll();
+            // Build tendencia indexed by [anio][fuente]
+            $vc_anios = []; $vc_tend = [];
+            foreach ($vc_tendencia_raw as $r) {
+                $vc_anios[$r['anio']] = true;
+                $vc_tend[$r['anio']][$r['fuente']] = $r;
+            }
+            ksort($vc_anios); ksort($vc_tend);
+            $vc_max_total = 1;
+            foreach ($vc_tend as $anio => $fuentes) {
+                $t = array_sum(array_column($fuentes, 'total'));
+                if ($t > $vc_max_total) $vc_max_total = $t;
+            }
+
+            $vc_ultimas = $db->query("
+                SELECT fecha_convenio, kit, nombre_curso, num_estudiantes,
+                    valor_linea, fuente, estado_convenio, codigo_convenio
+                FROM v_ventas_colegios
+                WHERE colegio_id = $colegioId
+                ORDER BY fecha_convenio DESC
+                LIMIT 15
+            ")->fetchAll();
+
+            $datos = $vc_ultimas;
+
+        } else {
+            // ── MODO RESUMEN: ranking de colegios ──
+            $titulo_reporte = 'Resumen de Ventas por Colegio';
+            $where = $conds ? ('WHERE ' . implode(' AND ', $conds)) : '';
+            $datos = $db->query("
+                SELECT colegio_id, colegio, ciudad, tipo_colegio,
+                    COUNT(*) AS operaciones,
+                    COALESCE(SUM(num_estudiantes), 0) AS estudiantes,
+                    COALESCE(SUM(valor_linea), 0)     AS total_cop,
+                    SUM(CASE WHEN fuente='tienda'   THEN 1 ELSE 0 END) AS tienda_ops,
+                    SUM(CASE WHEN fuente='convenio' THEN 1 ELSE 0 END) AS conv_ops,
+                    MAX(fecha_convenio) AS ultima_operacion
+                FROM v_ventas_colegios
+                $where
+                GROUP BY colegio_id, colegio, ciudad, tipo_colegio
+                ORDER BY total_cop DESC
+            ")->fetchAll();
+        }
         break;
 
     // ─────────────────────────────────────────────
@@ -312,10 +388,17 @@ if ($tipo === 'valorizacion') {
     $stats['total_margen']= array_sum(array_column($datos,'margen'));
 }
 if ($tipo === 'ventas_colegios') {
-    $stats['colegios']      = count(array_unique(array_column($datos, 'colegio')));
-    $stats['lineas']        = count($datos);
-    $stats['estudiantes']   = array_sum(array_column($datos, 'num_estudiantes'));
-    $stats['total_valor']   = array_sum(array_column($datos, 'valor_linea'));
+    if ($colegioId) {
+        $stats['colegios']    = 1;
+        $stats['lineas']      = (int)($vc_kpis['lineas']      ?? 0);
+        $stats['estudiantes'] = (int)($vc_kpis['estudiantes'] ?? 0);
+        $stats['total_valor'] = (float)($vc_kpis['total_cop'] ?? 0);
+    } else {
+        $stats['colegios']    = count($datos);
+        $stats['lineas']      = array_sum(array_column($datos, 'operaciones'));
+        $stats['estudiantes'] = array_sum(array_column($datos, 'estudiantes'));
+        $stats['total_valor'] = array_sum(array_column($datos, 'total_cop'));
+    }
 }
 if ($tipo === 'financiero') {
     $stats['total_general']  = array_sum(array_column($datos, 'total_cop'));
@@ -395,6 +478,17 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 .top-name { flex:1; font-size:.78rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .top-val  { font-size:.75rem; font-weight:700; color:#16a34a; white-space:nowrap; }
 .top-ops  { font-size:.63rem; color:var(--rs-text-muted); }
+/* ── Dashboard de colegio ── */
+.vc-header { background:#fff; border:1px solid var(--rs-gray-200); border-radius:var(--rs-radius); padding:1rem 1.25rem; margin-bottom:.85rem; display:flex; align-items:center; gap:1rem; }
+.vc-avatar { width:50px; height:50px; border-radius:12px; background:#dbeafe; color:#1d4ed8; display:flex; align-items:center; justify-content:center; font-size:1.45rem; flex-shrink:0; }
+.vc-grid-4  { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; }
+.vc-grid-2  { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+.vc-grid-tend { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+@media(max-width:900px){ .vc-grid-4{grid-template-columns:repeat(2,1fr)} .vc-grid-tend{grid-template-columns:1fr} }
+@media(max-width:560px){ .vc-grid-4{grid-template-columns:1fr} .vc-grid-2{grid-template-columns:1fr} }
+.vc-canal-badge { display:inline-block; font-size:.65rem; padding:.15rem .5rem; border-radius:20px; font-weight:700; }
+.vc-kit-row { display:flex; align-items:center; gap:.6rem; padding:.4rem 0; border-bottom:1px solid var(--rs-gray-100); }
+.vc-kit-row:last-child { border-bottom:none; }
 @media print {
   .filter-bar, .sidebar, .topbar, .no-print { display: none !important; }
   .print-btn { display: inline; }
@@ -834,7 +928,212 @@ $pipe_cfg = [
 </div>
 <?php endif; // fin dashboard ?>
 
+<!-- ── DASHBOARD COLEGIO ── -->
+<?php if ($tipo === 'ventas_colegios' && $colegioId): ?>
+<?php
+$vc_nombre = htmlspecialchars($vc_info['nombre'] ?? 'Colegio');
+$vc_ciudad = htmlspecialchars($vc_info['ciudad'] ?? '');
+$vc_tipo   = htmlspecialchars($vc_info['tipo']   ?? '');
+$vc_total  = (float)($vc_kpis['total_cop']   ?? 0);
+$vc_tienda = (float)($vc_kpis['total_tienda'] ?? 0);
+$vc_conv   = (float)($vc_kpis['total_conv']   ?? 0);
+$vc_pct_t  = $vc_total > 0 ? round(($vc_tienda / $vc_total) * 100) : 0;
+$vc_pct_c  = $vc_total > 0 ? round(($vc_conv   / $vc_total) * 100) : 0;
+$back_qs   = http_build_query(['tipo'=>'ventas_colegios','desde'=>$fechaDesde,'hasta'=>$fechaHasta,'estado_conv'=>$estadoConv]);
+?>
+
+<!-- Header del colegio -->
+<div class="vc-header mb-3">
+  <div class="vc-avatar"><i class="bi bi-building"></i></div>
+  <div style="flex:1;min-width:0">
+    <div style="font-size:1.1rem;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= $vc_nombre ?></div>
+    <div style="font-size:.78rem;color:var(--rs-text-muted);margin-top:.1rem">
+      <?php if ($vc_ciudad): ?><i class="bi bi-geo-alt me-1"></i><?= $vc_ciudad ?> &nbsp;·&nbsp; <?php endif; ?>
+      <?php if ($vc_tipo): ?><i class="bi bi-tag me-1"></i><?= $vc_tipo ?> &nbsp;·&nbsp; <?php endif; ?>
+      <i class="bi bi-clock-history me-1"></i><?= (int)($vc_kpis['anios_cliente'] ?? 0) ?> año(s) como cliente
+    </div>
+    <?php if ($vc_kpis['primera_compra'] ?? null): ?>
+    <div style="font-size:.72rem;color:var(--rs-text-muted);margin-top:.15rem">
+      Primera compra: <?= date('d/m/Y', strtotime($vc_kpis['primera_compra'])) ?>
+      &nbsp;·&nbsp; Última: <?= date('d/m/Y', strtotime($vc_kpis['ultima_compra'])) ?>
+    </div>
+    <?php endif; ?>
+  </div>
+  <a href="?<?= $back_qs ?>" class="btn btn-outline-secondary btn-sm no-print">
+    <i class="bi bi-arrow-left me-1"></i>Volver al resumen
+  </a>
+</div>
+
+<!-- KPIs fila 1 -->
+<div class="vc-grid-4 mb-3">
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#dcfce7;color:#16a34a"><i class="bi bi-cash-stack"></i></div>
+    <div class="dk-val md">$<?= number_format($vc_total/1000000,2,',','.') ?>M</div>
+    <div class="dk-lbl">Total facturado</div>
+    <div class="dk-sub">histórico acumulado</div>
+  </div>
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#dbeafe;color:#1d4ed8"><i class="bi bi-people"></i></div>
+    <div class="dk-val"><?= number_format((int)($vc_kpis['estudiantes'] ?? 0),0,',','.') ?></div>
+    <div class="dk-lbl">Estudiantes totales</div>
+    <div class="dk-sub">kits entregados</div>
+  </div>
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#faf5ff;color:#7c3aed"><i class="bi bi-receipt"></i></div>
+    <div class="dk-val"><?= (int)($vc_kpis['lineas'] ?? 0) ?></div>
+    <div class="dk-lbl">Operaciones</div>
+    <div class="dk-sub"><?= (int)($vc_kpis['lineas_tienda'] ?? 0) ?> tienda · <?= (int)($vc_kpis['lineas_conv'] ?? 0) ?> convenio</div>
+  </div>
+  <div class="dk-card">
+    <div class="dk-icon" style="background:#ffedd5;color:#9a3412"><i class="bi bi-calendar-check"></i></div>
+    <div class="dk-val md"><?= $vc_kpis['ultima_compra'] ? date('M Y', strtotime($vc_kpis['ultima_compra'])) : '—' ?></div>
+    <div class="dk-lbl">Última operación</div>
+    <div class="dk-sub">ticket prom. $<?= ($vc_kpis['lineas'] ?? 0) > 0 ? number_format($vc_total / $vc_kpis['lineas'],0,',','.') : '0' ?></div>
+  </div>
+</div>
+
+<!-- Canal split -->
+<div class="vc-grid-2 mb-3">
+  <div class="canal-card" style="border-top-color:#2563eb">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem">
+      <div class="dk-icon" style="background:#dbeafe;color:#2563eb;width:28px;height:28px;font-size:.85rem"><i class="bi bi-bag"></i></div>
+      <span style="font-size:.73rem;font-weight:700;color:var(--rs-text-muted);text-transform:uppercase;letter-spacing:.04em">Tienda Online</span>
+    </div>
+    <div class="dk-val md">$<?= number_format($vc_tienda/1000000,2,',','.') ?>M</div>
+    <div class="dk-sep"></div>
+    <div style="height:5px;background:var(--rs-gray-100);border-radius:3px;overflow:hidden;margin-bottom:.25rem">
+      <div style="height:100%;width:<?= $vc_pct_t ?>%;background:#2563eb;border-radius:3px"></div>
+    </div>
+    <div style="font-size:.63rem;color:var(--rs-text-muted)"><?= $vc_pct_t ?>% del total · <?= (int)($vc_kpis['lineas_tienda'] ?? 0) ?> operaciones</div>
+  </div>
+  <div class="canal-card" style="border-top-color:#16a34a">
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem">
+      <div class="dk-icon" style="background:#dcfce7;color:#16a34a;width:28px;height:28px;font-size:.85rem"><i class="bi bi-building"></i></div>
+      <span style="font-size:.73rem;font-weight:700;color:var(--rs-text-muted);text-transform:uppercase;letter-spacing:.04em">Convenio B2B</span>
+    </div>
+    <div class="dk-val md">$<?= number_format($vc_conv/1000000,2,',','.') ?>M</div>
+    <div class="dk-sep"></div>
+    <div style="height:5px;background:var(--rs-gray-100);border-radius:3px;overflow:hidden;margin-bottom:.25rem">
+      <div style="height:100%;width:<?= $vc_pct_c ?>%;background:#16a34a;border-radius:3px"></div>
+    </div>
+    <div style="font-size:.63rem;color:var(--rs-text-muted)"><?= $vc_pct_c ?>% del total · <?= (int)($vc_kpis['lineas_conv'] ?? 0) ?> operaciones</div>
+  </div>
+</div>
+
+<!-- Tendencia anual + Kits -->
+<div class="vc-grid-tend mb-3">
+
+  <!-- Tendencia por año -->
+  <div class="dk-panel">
+    <div class="dk-panel-title"><i class="bi bi-bar-chart-line me-1"></i>Facturación por año</div>
+    <?php if (empty($vc_anios)): ?>
+      <p class="text-muted small mb-0">Sin datos.</p>
+    <?php else: ?>
+    <div style="display:flex;gap:.3rem;margin-bottom:.5rem">
+      <span style="font-size:.64rem;font-weight:600;color:#2563eb"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2563eb;margin-right:2px"></span>Tienda</span>
+      <span style="font-size:.64rem;font-weight:600;color:#16a34a"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:2px"></span>Convenio</span>
+    </div>
+    <div class="trend-chart" style="height:120px">
+      <?php foreach (array_keys($vc_anios) as $anio):
+        $vals  = $vc_tend[$anio] ?? [];
+        $t_t   = (float)($vals['tienda']['total']   ?? 0);
+        $t_c   = (float)($vals['convenio']['total'] ?? 0);
+        $total = $t_t + $t_c;
+        $pct_h = $vc_max_total > 0 ? max(4, round(($total/$vc_max_total)*100)) : 4;
+        $est   = ($vals['tienda']['estudiantes'] ?? 0) + ($vals['convenio']['estudiantes'] ?? 0);
+      ?>
+      <div class="trend-col">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:100%;gap:1px">
+          <?php if ($t_c > 0): $ph_c = $total > 0 ? max(2, round(($t_c/$total)*$pct_h)) : 0; ?>
+          <div title="Convenio <?= $anio ?>: $<?= number_format($t_c/1000000,2,',','.') ?>M"
+               style="height:<?= $ph_c ?>px;background:#16a34a;border-radius:2px 2px 0 0;opacity:.85"></div>
+          <?php endif; ?>
+          <?php if ($t_t > 0): $ph_t = $total > 0 ? max(2, round(($t_t/$total)*$pct_h)) : 0; ?>
+          <div title="Tienda <?= $anio ?>: $<?= number_format($t_t/1000000,2,',','.') ?>M"
+               style="height:<?= $ph_t ?>px;background:#2563eb;border-radius:2px 2px 0 0;opacity:.85"></div>
+          <?php endif; ?>
+        </div>
+        <div class="trend-mes"><?= $anio ?></div>
+        <div style="font-size:.58rem;color:var(--rs-text-muted);text-align:center">$<?= number_format($total/1000000,1,',','.') ?>M</div>
+        <div style="font-size:.56rem;color:var(--rs-text-muted);text-align:center"><?= number_format($est,0,',','.') ?> est.</div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Kits comprados -->
+  <div class="dk-panel">
+    <div class="dk-panel-title"><i class="bi bi-box-seam me-1"></i>Kits comprados</div>
+    <?php if (empty($vc_kits)): ?>
+      <p class="text-muted small mb-0">Sin kits registrados.</p>
+    <?php else:
+      $max_kit = max(array_column($vc_kits, 'total')) ?: 1;
+      foreach ($vc_kits as $k):
+        $es_t = ($k['fuente'] === 'tienda');
+    ?>
+    <div class="vc-kit-row">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= htmlspecialchars($k['kit']) ?>"><?= htmlspecialchars($k['kit']) ?></div>
+        <div style="height:3px;background:var(--rs-gray-100);border-radius:2px;margin-top:3px;overflow:hidden">
+          <div style="height:100%;width:<?= round(($k['total']/$max_kit)*100) ?>%;background:<?= $es_t?'#2563eb':'#16a34a' ?>;border-radius:2px"></div>
+        </div>
+      </div>
+      <div style="text-align:right;min-width:90px">
+        <div style="font-size:.75rem;font-weight:700;color:#16a34a">$<?= number_format($k['total'],0,',','.') ?></div>
+        <div style="font-size:.62rem;color:var(--rs-text-muted)"><?= number_format($k['estudiantes'],0,',','.') ?> est.
+          <span class="vc-canal-badge" style="background:<?= $es_t?'#dbeafe':'#dcfce7' ?>;color:<?= $es_t?'#1d4ed8':'#16a34a' ?>"><?= $es_t?'Tienda':'Conv.' ?></span>
+        </div>
+      </div>
+    </div>
+    <?php endforeach; endif; ?>
+  </div>
+
+</div>
+
+<!-- Historial reciente -->
+<div class="section-card p-0 mb-3" style="overflow:hidden">
+  <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+    <span class="fw-bold" style="font-size:.85rem"><i class="bi bi-clock-history me-1 text-muted"></i>Historial de operaciones</span>
+    <span class="badge bg-secondary"><?= count($vc_ultimas) ?> más recientes</span>
+  </div>
+  <?php if (empty($vc_ultimas)): ?>
+    <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-2 d-block mb-2"></i>Sin operaciones registradas.</div>
+  <?php else: ?>
+  <div class="table-responsive">
+  <table class="table table-hover report-table mb-0">
+    <thead><tr>
+      <th>Fecha</th><th>Kit</th><th>Curso</th><th class="text-center">Est.</th>
+      <th class="text-end">Valor</th><th>Canal</th><th>Estado</th><th>Ref.</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($vc_ultimas as $r):
+      $es_t = ($r['fuente'] === 'tienda');
+      $est  = strtolower($r['estado_convenio'] ?? '');
+      $est_color = $est === 'rechazado' ? '#dc2626' : ($est === 'pendiente' ? '#b45309' : '#16a34a');
+      $est_bg    = $est === 'rechazado' ? '#fee2e2' : ($est === 'pendiente' ? '#fef9c3' : '#dcfce7');
+    ?>
+    <tr>
+      <td class="text-muted small"><?= $r['fecha_convenio'] ? date('d/m/Y', strtotime($r['fecha_convenio'])) : '—' ?></td>
+      <td class="fw-semibold" style="font-size:.8rem"><?= htmlspecialchars($r['kit'] ?? '—') ?></td>
+      <td class="text-muted small"><?= htmlspecialchars($r['nombre_curso'] ?? '—') ?></td>
+      <td class="text-center fw-bold"><?= number_format((int)$r['num_estudiantes'],0,',','.') ?></td>
+      <td class="text-end fw-semibold"><?= $r['valor_linea'] ? '$'.number_format($r['valor_linea'],0,',','.') : '—' ?></td>
+      <td><span class="vc-canal-badge" style="background:<?= $es_t?'#dbeafe':'#dcfce7' ?>;color:<?= $es_t?'#1d4ed8':'#16a34a' ?>"><?= $es_t ? 'Tienda' : 'Convenio' ?></span></td>
+      <td><span style="font-size:.68rem;padding:.15rem .5rem;border-radius:20px;font-weight:600;background:<?= $est_bg ?>;color:<?= $est_color ?>"><?= ucfirst($r['estado_convenio'] ?? '—') ?></span></td>
+      <td class="text-muted small"><?= htmlspecialchars($r['codigo_convenio'] ?? '—') ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+</div>
+
+<?php endif; // fin dashboard colegio ?>
+
 <!-- ── TABLA PRINCIPAL ── -->
+<?php if (!($tipo === 'ventas_colegios' && $colegioId)): ?>
 <div class="section-card p-0" style="overflow:hidden;">
   <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
     <div>
@@ -854,9 +1153,20 @@ $pipe_cfg = [
   <table class="table table-hover report-table mb-0">
     <thead>
       <tr>
+        <?php if ($tipo === 'ventas_colegios'): ?>
+          <th style="width:36px">#</th>
+          <th>Colegio</th><th>Ciudad</th><th>Tipo</th>
+          <th class="text-center">Operaciones</th>
+          <th class="text-center">Estudiantes</th>
+          <th class="text-end">Total COP</th>
+          <th>Canal</th>
+          <th>Última operación</th>
+          <th></th>
+        <?php else: ?>
         <?php foreach ($columnas as $col): ?>
           <th><?= $col ?></th>
         <?php endforeach; ?>
+        <?php endif; ?>
       </tr>
     </thead>
     <tbody>
@@ -1007,66 +1317,47 @@ $pipe_cfg = [
         </tr>
 
       <?php elseif ($tipo === 'ventas_colegios'): ?>
-        <?php
-        $col_actual = ''; $sub_est = 0; $sub_val = 0;
-        foreach ($datos as $r):
-          if ($r['colegio'] !== $col_actual):
-            if ($col_actual !== ''): ?>
-        <tr style="background:#f0fdf4;">
-          <td colspan="11" class="text-end fw-bold small" style="color:#166534;padding:.35rem .75rem;">
-            Subtotal <?= htmlspecialchars($col_actual) ?>:
-            <?= number_format($sub_est,0,',','.') ?> uds. &mdash;
-            $<?= number_format($sub_val,0,',','.') ?> COP
-          </td>
-        </tr>
-        <?php endif;
-            $col_actual = $r['colegio']; $sub_est = 0; $sub_val = 0; ?>
-        <tr style="background:#f8fafc;">
-          <td colspan="11" class="fw-bold small" style="color:#1e293b;padding:.4rem .75rem;">
-            <i class="bi bi-building me-1 text-primary"></i>
-            <?= htmlspecialchars($r['colegio']) ?>
-            <?php if ($r['ciudad']): ?><span class="text-muted fw-normal"> · <?= htmlspecialchars($r['ciudad']) ?></span><?php endif; ?>
-          </td>
-        </tr>
-        <?php endif;
-          $sub_est += $r['num_estudiantes'];
-          $sub_val += $r['valor_linea'];
+        <!-- Tabla resumen agrupada por colegio -->
+        <?php $max_resumen = max(array_column($datos, 'total_cop') ?: [1]) ?: 1; ?>
+        <?php foreach ($datos as $i => $r):
+          $vc_url = '?' . http_build_query(['tipo'=>'ventas_colegios','colegio_id'=>$r['colegio_id'],'estado_conv'=>$estadoConv]);
         ?>
-        <?php $es_tienda = ($r['fuente'] ?? 'convenio') === 'tienda'; ?>
-        <tr>
-          <td class="fw-semibold"><?= htmlspecialchars($r['colegio']) ?></td>
-          <td class="text-muted small"><?= htmlspecialchars($r['ciudad'] ?? '&mdash;') ?></td>
-          <td><span class="badge bg-light text-secondary border"><?= htmlspecialchars($r['tipo_colegio'] ?? '&mdash;') ?></span></td>
-          <td class="fw-semibold"><?= htmlspecialchars($r['kit'] ?? '&mdash;') ?></td>
-          <td class="text-muted small"><?= htmlspecialchars($r['nombre_curso'] ?? '&mdash;') ?></td>
-          <td class="text-center fw-bold"><?= number_format($r['num_estudiantes'],0,',','.') ?></td>
-          <td class="text-end"><?= $r['valor_kit'] ? '$'.number_format($r['valor_kit'],0,',','.') : '&mdash;' ?></td>
-          <td class="text-end fw-semibold"><?= $r['valor_linea'] ? '$'.number_format($r['valor_linea'],0,',','.') : '&mdash;' ?></td>
+        <tr style="cursor:pointer" onclick="window.location='<?= htmlspecialchars($vc_url) ?>'">
+          <td class="text-center text-muted fw-semibold" style="width:36px"><?= $i+1 ?></td>
           <td>
-            <span class="badge" style="font-size:.62rem;padding:.2rem .5rem;background:<?= $es_tienda?'#dbeafe':'#dcfce7' ?>;color:<?= $es_tienda?'#1d4ed8':'#16a34a' ?>;">
-              <?= $es_tienda ? 'Tienda' : 'Conv.' ?>
-            </span>
+            <div class="fw-semibold"><?= htmlspecialchars($r['colegio'] ?? '—') ?></div>
+            <div style="height:3px;background:var(--rs-gray-100);border-radius:2px;margin-top:3px;overflow:hidden">
+              <div style="height:100%;width:<?= round(($r['total_cop']/$max_resumen)*100) ?>%;background:#16a34a;border-radius:2px"></div>
+            </div>
           </td>
-          <td class="text-muted small"><?= htmlspecialchars($r['codigo_convenio'] ?? '&mdash;') ?></td>
-          <td class="text-muted small"><?= $r['fecha_convenio'] ? date('d/m/Y', strtotime($r['fecha_convenio'])) : '&mdash;' ?></td>
+          <td class="text-muted small"><?= htmlspecialchars($r['ciudad'] ?? '—') ?></td>
+          <td><span class="badge bg-light text-secondary border" style="font-size:.65rem"><?= htmlspecialchars($r['tipo_colegio'] ?? '—') ?></span></td>
+          <td class="text-center fw-bold"><?= number_format($r['operaciones'],0,',','.') ?></td>
+          <td class="text-center"><?= number_format($r['estudiantes'],0,',','.') ?></td>
+          <td class="text-end fw-bold" style="color:#16a34a">$<?= number_format($r['total_cop'],0,',','.') ?></td>
+          <td>
+            <?php if ($r['tienda_ops'] > 0): ?>
+              <span class="vc-canal-badge" style="background:#dbeafe;color:#1d4ed8"><?= $r['tienda_ops'] ?> tienda</span>
+            <?php endif; ?>
+            <?php if ($r['conv_ops'] > 0): ?>
+              <span class="vc-canal-badge ms-1" style="background:#dcfce7;color:#16a34a"><?= $r['conv_ops'] ?> conv.</span>
+            <?php endif; ?>
+          </td>
+          <td class="text-muted small"><?= $r['ultima_operacion'] ? date('d/m/Y', strtotime($r['ultima_operacion'])) : '—' ?></td>
+          <td>
+            <a href="<?= htmlspecialchars($vc_url) ?>" class="btn btn-outline-primary btn-sm" style="font-size:.7rem;padding:.2rem .6rem" onclick="event.stopPropagation()">
+              <i class="bi bi-graph-up me-1"></i>Ver
+            </a>
+          </td>
         </tr>
         <?php endforeach; ?>
-        <?php if ($col_actual): ?>
-        <tr style="background:#f0fdf4;">
-          <td colspan="11" class="text-end fw-bold small" style="color:#166534;padding:.35rem .75rem;">
-            Subtotal <?= htmlspecialchars($col_actual) ?>:
-            <?= number_format($sub_est,0,',','.') ?> uds. &mdash;
-            $<?= number_format($sub_val,0,',','.') ?> COP
-          </td>
-        </tr>
         <tr style="background:#1e293b;color:#fff;">
-          <td colspan="5" class="fw-bold">TOTAL</td>
+          <td colspan="4" class="fw-bold">TOTAL</td>
+          <td class="text-center fw-bold"><?= number_format($stats['lineas'],0,',','.') ?></td>
           <td class="text-center fw-bold"><?= number_format($stats['estudiantes'],0,',','.') ?></td>
-          <td></td>
           <td class="text-end fw-bold">$<?= number_format($stats['total_valor'],0,',','.') ?></td>
           <td colspan="3"></td>
         </tr>
-        <?php endif; ?>
 
       <?php elseif ($tipo === 'financiero'): ?>
         <?php
@@ -1112,5 +1403,6 @@ $pipe_cfg = [
   </div>
   <?php endif; ?>
 </div>
+<?php endif; // fin if (!colegioId) — tabla principal ?>
 
 <?php require_once dirname(__DIR__, 2) . '/includes/footer.php'; ?>
