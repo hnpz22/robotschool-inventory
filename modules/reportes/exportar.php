@@ -12,6 +12,15 @@ $fechaHasta = $_GET['hasta']     ?? date('Y-m-d');
 $pedidoId   = (int)($_GET['pedido_id'] ?? 0);
 $catId      = (int)($_GET['cat_id']    ?? 0);
 $provId     = (int)($_GET['prov_id']   ?? 0);
+$colegioId  = (int)($_GET['colegio_id']  ?? 0);
+$kitNombre  = trim($_GET['kit_nombre']   ?? '');
+$fuente     = $_GET['fuente']            ?? 'all';
+$estadoConv = $_GET['estado_conv']       ?? 'aprobado';
+
+if (in_array($tipo, ['ventas_colegios','financiero']) && !isset($_GET['desde'])) {
+    $fechaDesde = date('Y-01-01');
+    $fechaHasta = date('Y-m-d');
+}
 
 $datos = [];
 $columnas = [];
@@ -97,6 +106,28 @@ switch ($tipo) {
             WHERE e.activo=1 GROUP BY c.id ORDER BY valor_costo DESC
         ")->fetchAll();
         break;
+
+    case 'ventas_colegios':
+        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Estudiantes','Val Kit COP','Val Linea COP','Convenio','Fecha Convenio','Estado'];
+        $conds = [];
+        if ($estadoConv !== 'all') $conds[] = "estado_convenio = " . $db->quote($estadoConv);
+        if ($colegioId)            $conds[] = "colegio_id = $colegioId";
+        if ($kitNombre)            $conds[] = "kit = " . $db->quote($kitNombre);
+        if ($fechaDesde)           $conds[] = "fecha_convenio >= '$fechaDesde'";
+        if ($fechaHasta)           $conds[] = "fecha_convenio <= '$fechaHasta'";
+        $where = $conds ? ('WHERE ' . implode(' AND ', $conds)) : '';
+        $datos = $db->query("SELECT colegio, ciudad, tipo_colegio, kit, nombre_curso, num_estudiantes, valor_kit, valor_linea, codigo_convenio, fecha_convenio, estado_convenio FROM v_ventas_colegios $where ORDER BY colegio, fecha_convenio DESC, kit")->fetchAll();
+        break;
+
+    case 'financiero':
+        $columnas = ['Mes','Canal','Operaciones','Total COP'];
+        $mesDesde = substr($fechaDesde, 0, 7);
+        $mesHasta = substr($fechaHasta, 0, 7);
+        $conds = ["mes BETWEEN '$mesDesde' AND '$mesHasta'"];
+        if ($fuente !== 'all') $conds[] = "fuente = " . $db->quote($fuente);
+        $where = 'WHERE ' . implode(' AND ', $conds);
+        $datos = $db->query("SELECT mes, fuente, cantidad, total_cop FROM v_ingresos_mensuales $where ORDER BY mes DESC, fuente")->fetchAll();
+        break;
 }
 
 // ── Enviar CSV ──
@@ -110,8 +141,8 @@ echo "\xEF\xBB\xBF";
 $out = fopen('php://output', 'w');
 
 // Cabecera: metadata del reporte
-fputcsv($out, ['ROBOTSchool Inventory &mdash; Reporte: ' . strtoupper($tipo)], ';');
-fputcsv($out, ['Generado:', date('d/m/Y H:i'), 'Filtros:', "desde=$fechaDesde hasta=$fechaHasta cat=$catId prov=$provId pedido=$pedidoId"], ';');
+fputcsv($out, ['ROBOTSchool Inventory - Reporte: ' . strtoupper($tipo)], ';');
+fputcsv($out, ['Generado:', date('d/m/Y H:i'), 'Filtros:', "desde=$fechaDesde hasta=$fechaHasta colegio=$colegioId kit=$kitNombre fuente=$fuente cat=$catId prov=$provId pedido=$pedidoId"], ';');
 fputcsv($out, [], ';');
 
 // Columnas

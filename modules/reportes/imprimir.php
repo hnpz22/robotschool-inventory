@@ -19,6 +19,15 @@ $pedidoId   = (int)($_GET['pedido_id'] ?? 0);
 $catId      = (int)($_GET['cat_id']    ?? 0);
 $provId     = (int)($_GET['prov_id']   ?? 0);
 $salida     = $_GET['salida']    ?? 'pdf'; // pdf | excel | csv
+$colegioId  = (int)($_GET['colegio_id']  ?? 0);
+$kitNombre  = trim($_GET['kit_nombre']   ?? '');
+$fuente     = $_GET['fuente']            ?? 'all';
+$estadoConv = $_GET['estado_conv']       ?? 'aprobado';
+
+if (in_array($tipo, ['ventas_colegios','financiero']) && !isset($_GET['desde'])) {
+    $fechaDesde = date('Y-01-01');
+    $fechaHasta = date('Y-m-d');
+}
 
 // ── Obtener datos y columnas ──
 $datos = [];
@@ -124,6 +133,35 @@ switch ($tipo) {
         ")->fetchAll();
         $total_venta = array_sum(array_column($datos,'valor_venta')) ?: 1;
         break;
+
+    case 'ventas_colegios':
+        $titulo_reporte = 'Ventas de Kits por Colegio';
+        $subtitulo = 'Del ' . date('d/m/Y', strtotime($fechaDesde)) . ' al ' . date('d/m/Y', strtotime($fechaHasta));
+        $columnas = ['Colegio','Ciudad','Tipo','Kit','Curso','Estudiantes','Val. Kit','Val. Línea','Convenio','Fecha'];
+        $conds = [];
+        if ($estadoConv !== 'all') $conds[] = "estado_convenio = " . $db->quote($estadoConv);
+        if ($colegioId)            $conds[] = "colegio_id = $colegioId";
+        if ($kitNombre)            $conds[] = "kit = " . $db->quote($kitNombre);
+        if ($fechaDesde)           $conds[] = "fecha_convenio >= '$fechaDesde'";
+        if ($fechaHasta)           $conds[] = "fecha_convenio <= '$fechaHasta'";
+        $where = $conds ? ('WHERE ' . implode(' AND ', $conds)) : '';
+        $datos = $db->query("SELECT * FROM v_ventas_colegios $where ORDER BY colegio, fecha_convenio DESC, kit")->fetchAll();
+        break;
+
+    case 'financiero':
+        $titulo_reporte = 'Reporte Financiero Consolidado';
+        $subtitulo = 'Del ' . date('d/m/Y', strtotime($fechaDesde)) . ' al ' . date('d/m/Y', strtotime($fechaHasta));
+        $columnas = ['Mes','Canal','Operaciones','Total COP','%'];
+        $mesDesde = substr($fechaDesde, 0, 7);
+        $mesHasta = substr($fechaHasta, 0, 7);
+        $conds = ["mes BETWEEN '$mesDesde' AND '$mesHasta'"];
+        if ($fuente !== 'all') $conds[] = "fuente = " . $db->quote($fuente);
+        $where = 'WHERE ' . implode(' AND ', $conds);
+        $datos = $db->query("SELECT * FROM v_ingresos_mensuales $where ORDER BY mes DESC, fuente")->fetchAll();
+        $grand_total = array_sum(array_column($datos,'total_cop')) ?: 1;
+        foreach ($datos as &$r) { $r['pct'] = round(($r['total_cop'] / $grand_total) * 100, 1); }
+        unset($r);
+        break;
 }
 
 // ── Si es CSV: descargar directo ──
@@ -136,6 +174,15 @@ if ($salida === 'csv') {
     fputcsv($out, [], ';');
     fputcsv($out, $columnas, ';');
     foreach ($datos as $r) { fputcsv($out, array_values($r), ';'); }
+    // Fila de totales para reportes comerciales
+    if ($tipo === 'ventas_colegios') {
+        fputcsv($out, [], ';');
+        fputcsv($out, ['TOTAL','','','','',array_sum(array_column($datos,'num_estudiantes')),'',array_sum(array_column($datos,'valor_linea')),'',''], ';');
+    }
+    if ($tipo === 'financiero') {
+        fputcsv($out, [], ';');
+        fputcsv($out, ['TOTAL','',array_sum(array_column($datos,'cantidad')),array_sum(array_column($datos,'total_cop')),'100%'], ';');
+    }
     fclose($out);
     exit;
 }
@@ -341,6 +388,34 @@ $logo_b64 = file_exists($logo_path) ? 'data:image/png;base64,' . base64_encode(f
   </div>
   <?php endif; ?>
 
+  <?php if ($tipo === 'ventas_colegios'): ?>
+  <?php
+    $vc_colegios    = count(array_unique(array_column($datos,'colegio')));
+    $vc_estudiantes = array_sum(array_column($datos,'num_estudiantes'));
+    $vc_total       = array_sum(array_column($datos,'valor_linea'));
+  ?>
+  <div class="stats-bar">
+    <div class="stat-box"><div class="val"><?= $vc_colegios ?></div><div class="lbl">Colegios</div></div>
+    <div class="stat-box"><div class="val"><?= count($datos) ?></div><div class="lbl">Líneas</div></div>
+    <div class="stat-box"><div class="val" style="color:#2563eb;"><?= number_format($vc_estudiantes,0,',','.') ?></div><div class="lbl">Estudiantes</div></div>
+    <div class="stat-box"><div class="val" style="color:#16a34a;">$<?= number_format($vc_total,0,',','.') ?></div><div class="lbl">Total COP</div></div>
+  </div>
+  <?php endif; ?>
+
+  <?php if ($tipo === 'financiero'): ?>
+  <?php
+    $por_fuente = [];
+    foreach ($datos as $r) $por_fuente[$r['fuente']] = ($por_fuente[$r['fuente']] ?? 0) + $r['total_cop'];
+    $fi_total = array_sum($por_fuente);
+  ?>
+  <div class="stats-bar">
+    <div class="stat-box"><div class="val" style="color:#2563eb;">$<?= number_format($por_fuente['tienda'] ?? 0,0,',','.') ?></div><div class="lbl">Tienda</div></div>
+    <div class="stat-box"><div class="val" style="color:#16a34a;">$<?= number_format($por_fuente['convenios'] ?? 0,0,',','.') ?></div><div class="lbl">Convenios</div></div>
+    <div class="stat-box"><div class="val" style="color:#7c3aed;">$<?= number_format($por_fuente['escuela'] ?? 0,0,',','.') ?></div><div class="lbl">Escuela</div></div>
+    <div class="stat-box"><div class="val">$<?= number_format($fi_total,0,',','.') ?></div><div class="lbl">TOTAL COP</div></div>
+  </div>
+  <?php endif; ?>
+
   <!-- ── TABLA DE DATOS ── -->
   <table id="tabla-reporte">
     <thead>
@@ -485,6 +560,81 @@ $logo_b64 = file_exists($logo_path) ? 'data:image/png;base64,' . base64_encode(f
           <td class="num">$<?= number_format($tm,0,',','.') ?></td>
           <td class="num">100%</td>
         </tr>
+
+    <?php elseif ($tipo === 'ventas_colegios'): ?>
+      <?php
+        $col_actual = ''; $sub_est = 0; $sub_val = 0;
+        foreach ($datos as $r):
+          if ($r['colegio'] !== $col_actual):
+            if ($col_actual !== ''): ?>
+        <tr class="subtotal-row">
+          <td colspan="9" style="text-align:right;">Subtotal <?= htmlspecialchars($col_actual) ?>: <?= number_format($sub_est,0,',','.') ?> est. &mdash;</td>
+          <td class="num">$<?= number_format($sub_val,0,',','.') ?></td>
+        </tr>
+        <?php   endif;
+            $col_actual = $r['colegio']; $sub_est = 0; $sub_val = 0; ?>
+        <tr class="group-row">
+          <td colspan="<?= count($columnas) ?>"><?= htmlspecialchars($r['colegio']) ?><?= $r['ciudad'] ? ' · '.$r['ciudad'] : '' ?></td>
+        </tr>
+        <?php endif;
+          $sub_est += $r['num_estudiantes'];
+          $sub_val += $r['valor_linea'];
+        ?>
+        <tr>
+          <td><?= htmlspecialchars($r['colegio']) ?></td>
+          <td style="font-size:7.5pt;color:#64748b;"><?= htmlspecialchars($r['ciudad'] ?? '') ?></td>
+          <td style="font-size:7.5pt;"><?= htmlspecialchars($r['tipo_colegio'] ?? '') ?></td>
+          <td><?= htmlspecialchars($r['kit'] ?? '&mdash;') ?></td>
+          <td style="font-size:7.5pt;color:#64748b;"><?= htmlspecialchars($r['nombre_curso'] ?? '&mdash;') ?></td>
+          <td class="num"><?= number_format($r['num_estudiantes'],0,',','.') ?></td>
+          <td class="num"><?= $r['valor_kit'] ? '$'.number_format($r['valor_kit'],0,',','.') : '&mdash;' ?></td>
+          <td class="num"><strong><?= $r['valor_linea'] ? '$'.number_format($r['valor_linea'],0,',','.') : '&mdash;' ?></strong></td>
+          <td style="font-size:7.5pt;"><?= htmlspecialchars($r['codigo_convenio'] ?? '') ?></td>
+          <td style="font-size:7.5pt;"><?= $r['fecha_convenio'] ? date('d/m/Y', strtotime($r['fecha_convenio'])) : '' ?></td>
+        </tr>
+      <?php endforeach; ?>
+      <?php if ($col_actual): ?>
+        <tr class="subtotal-row">
+          <td colspan="9" style="text-align:right;">Subtotal <?= htmlspecialchars($col_actual) ?>: <?= number_format($sub_est,0,',','.') ?> est. &mdash;</td>
+          <td class="num">$<?= number_format($sub_val,0,',','.') ?></td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="5"><strong>TOTAL</strong></td>
+          <td class="num"><?= number_format($vc_estudiantes,0,',','.') ?></td>
+          <td></td>
+          <td class="num">$<?= number_format($vc_total,0,',','.') ?></td>
+          <td colspan="2"></td>
+        </tr>
+      <?php endif; ?>
+
+    <?php elseif ($tipo === 'financiero'): ?>
+      <?php
+        $fuentes_label = ['tienda'=>'Tienda Online','convenios'=>'Convenios Colegios','escuela'=>'Escuela / Matrículas'];
+        $fuente_colors = ['tienda'=>'#2563eb','convenios'=>'#16a34a','escuela'=>'#7c3aed'];
+        $mes_actual = '';
+        foreach ($datos as $r):
+          if ($r['mes'] !== $mes_actual):
+            $mes_actual = $r['mes']; ?>
+        <tr class="group-row">
+          <td colspan="<?= count($columnas) ?>"><?= date('F Y', strtotime($r['mes'].'-01')) ?></td>
+        </tr>
+        <?php endif;
+          $fc = $fuente_colors[$r['fuente']] ?? '#64748b'; ?>
+        <tr>
+          <td style="font-size:7.5pt;color:#64748b;"><?= date('M Y', strtotime($r['mes'].'-01')) ?></td>
+          <td><span class="estado-pill" style="background:<?= $fc ?>22;color:<?= $fc ?>;border:1px solid <?= $fc ?>44;"><?= $fuentes_label[$r['fuente']] ?? ucfirst($r['fuente']) ?></span></td>
+          <td class="num"><?= number_format($r['cantidad'],0,',','.') ?></td>
+          <td class="num"><strong>$<?= number_format($r['total_cop'],0,',','.') ?></strong></td>
+          <td class="num"><?= $r['pct'] ?>%</td>
+        </tr>
+      <?php endforeach; ?>
+        <tr class="total-row">
+          <td colspan="2"><strong>TOTAL</strong></td>
+          <td class="num"><?= number_format(array_sum(array_column($datos,'cantidad')),0,',','.') ?></td>
+          <td class="num">$<?= number_format($fi_total,0,',','.') ?></td>
+          <td class="num">100%</td>
+        </tr>
+
     <?php endif; ?>
 
     </tbody>
