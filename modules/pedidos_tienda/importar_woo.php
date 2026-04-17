@@ -75,7 +75,8 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <div class="alert alert-<?= $result['errores'] > 0 ? 'warning' : 'success' ?> py-2 mb-3">
   <strong>Importación completada:</strong>
   <strong class="text-success"><?= $result['importados'] ?></strong> importados &bull;
-  <strong class="text-secondary"><?= $result['duplicados'] ?></strong> duplicados (ya existían) &bull;
+  <strong class="text-info"><?= $result['actualizados'] ?? 0 ?></strong> actualizados &bull;
+  <strong class="text-secondary"><?= $result['duplicados'] ?></strong> sin cambios &bull;
   <strong class="text-danger"><?= $result['errores'] ?></strong> errores
   <?php if (!empty($result['statuses_vistos'])): ?>
   <div class="mt-2 small"><strong>Statuses en WooCommerce:</strong>

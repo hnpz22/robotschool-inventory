@@ -59,8 +59,23 @@ class WooSync {
     // Statuses de WooCommerce que se importan
     public const STATUSES_IMPORTAR = ['processing', 'entregado', 'recibido', 'enviado', 'completed'];
 
+    // Ranking de estados internos — evita que un webhook retroceda un pedido
+    // que el equipo ya avanzó manualmente en el sistema.
+    private const RANK_ESTADO = [
+        'pendiente'   => 0,
+        'listo_envio' => 1,
+        'despachado'  => 2,
+        'entregado'   => 3,
+    ];
+
+    private function estadoMasAvanzado(string $actual, string $nuevo): string {
+        $rA = self::RANK_ESTADO[$actual] ?? 0;
+        $rN = self::RANK_ESTADO[$nuevo]  ?? 0;
+        return $rN >= $rA ? $nuevo : $actual;
+    }
+
     public function importarHistorico(int $maxPaginas = 10, ?string $after = null): array {
-        $r = ['importados' => 0, 'duplicados' => 0, 'errores' => 0, 'detalle' => [], 'statuses_vistos' => []];
+        $r = ['importados' => 0, 'actualizados' => 0, 'duplicados' => 0, 'errores' => 0, 'detalle' => [], 'statuses_vistos' => []];
 
         for ($pag = 1; $pag <= $maxPaginas; $pag++) {
             $params = [
@@ -89,8 +104,9 @@ class WooSync {
                 $r['statuses_vistos'][$st] = ($r['statuses_vistos'][$st] ?? 0) + 1;
                 if (!in_array($st, self::STATUSES_IMPORTAR, true)) continue;
                 $res = $this->procesarDesdeWebhook($order);
-                if ($res === 'ok')            $r['importados']++;
-                elseif ($res === 'duplicado') $r['duplicados']++;
+                if ($res === 'ok')               $r['importados']++;
+                elseif ($res === 'actualizado')  $r['actualizados']++;
+                elseif ($res === 'sin_cambios')  $r['duplicados']++;
                 else { $r['errores']++; $r['detalle'][] = "Pedido #{$order['id']}: $res"; }
             }
         }
@@ -102,18 +118,43 @@ class WooSync {
 
     /**
      * Procesa un pedido WooCommerce (recibido por webhook o importación histórica).
-     * Retorna 'ok', 'duplicado', o 'error: <mensaje>'.
+     * Retorna 'ok' (insertado), 'actualizado' (cambió), 'sin_cambios', o 'error: <mensaje>'.
      */
     public function procesarDesdeWebhook(array $order): string {
         $wooId = (string)($order['id'] ?? '');
         if ($wooId === '') return 'error: id de pedido vacío';
 
         try {
-            $st = $this->db->prepare("SELECT COUNT(*) FROM tienda_pedidos WHERE woo_order_id = ?");
+            $st = $this->db->prepare("SELECT id, woo_status, estado FROM tienda_pedidos WHERE woo_order_id = ?");
             $st->execute([$wooId]);
-            if ((int)$st->fetchColumn() > 0) return 'duplicado';
+            $existing = $st->fetch(PDO::FETCH_ASSOC);
 
             $data = $this->mapearPedido($order);
+
+            if ($existing) {
+                $estadoFinal = $this->estadoMasAvanzado((string)$existing['estado'], (string)$data['estado']);
+                $this->db->prepare(
+                    "UPDATE tienda_pedidos SET
+                        woo_status         = ?,
+                        woo_payment_method = ?,
+                        woo_total          = ?,
+                        woo_payload        = ?,
+                        woo_items_payload  = ?,
+                        estado             = ?,
+                        updated_at         = NOW()
+                      WHERE woo_order_id = ?"
+                )->execute([
+                    $data['woo_status'],
+                    $data['woo_payment_method'],
+                    $data['woo_total'],
+                    $data['woo_payload'],
+                    $data['woo_items_payload'],
+                    $estadoFinal,
+                    $wooId,
+                ]);
+                return ($existing['woo_status'] === $data['woo_status']) ? 'sin_cambios' : 'actualizado';
+            }
+
             $cols = implode(',', array_keys($data));
             $vals = ':' . implode(',:', array_keys($data));
             $this->db->prepare("INSERT INTO tienda_pedidos ($cols) VALUES ($vals)")->execute($data);

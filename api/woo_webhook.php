@@ -73,12 +73,17 @@ if (!in_array($wooStatus, WooSync::STATUSES_IMPORTAR, true)) {
 $woo    = new WooSync($db);
 $result = $woo->procesarDesdeWebhook($order);
 
-$logResultado = match(true) {
-    $result === 'ok'        => 'ok',
-    $result === 'duplicado' => 'duplicado',
-    default                 => 'error',
+$logResultado = match($result) {
+    'ok', 'actualizado' => 'ok',
+    'sin_cambios'       => 'duplicado',
+    default             => 'error',
 };
-$logDetalle = ($logResultado === 'error') ? $result : null;
+$logDetalle = match($result) {
+    'actualizado' => 'pedido actualizado',
+    'sin_cambios' => null,
+    'ok'          => null,
+    default       => $result,
+};
 
 $logWebhook($wooOrderId, $wooStatus, $logResultado, $logDetalle);
 
