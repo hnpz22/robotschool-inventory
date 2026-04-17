@@ -63,8 +63,8 @@ if (!$order || empty($order['id'])) {
 $wooOrderId = (string)$order['id'];
 $wooStatus  = $order['status'] ?? '';
 
-// 5. Solo procesar si el estado es 'processing' (pedido pagado)
-if ($wooStatus !== 'processing') {
+// 5. Solo procesar si el estado está en la lista blanca (ver WooSync::STATUSES_IMPORTAR)
+if (!in_array($wooStatus, WooSync::STATUSES_IMPORTAR, true)) {
     $logWebhook($wooOrderId, $wooStatus, 'ignorado', "Estado '$wooStatus' no requiere acción");
     exit(json_encode(['ok' => true, 'msg' => 'estado ignorado: ' . $wooStatus]));
 }

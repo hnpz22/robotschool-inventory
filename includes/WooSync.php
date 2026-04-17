@@ -57,7 +57,7 @@ class WooSync {
      * Retorna ['importados', 'duplicados', 'errores', 'detalle'].
      */
     // Statuses de WooCommerce que se importan
-    private const STATUSES_IMPORTAR = ['processing', 'entregado', 'recibido', 'enviado'];
+    public const STATUSES_IMPORTAR = ['processing', 'entregado', 'recibido', 'enviado', 'completed'];
 
     public function importarHistorico(int $maxPaginas = 10): array {
         $r = ['importados' => 0, 'duplicados' => 0, 'errores' => 0, 'detalle' => [], 'statuses_vistos' => []];
