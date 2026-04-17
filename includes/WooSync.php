@@ -59,17 +59,21 @@ class WooSync {
     // Statuses de WooCommerce que se importan
     public const STATUSES_IMPORTAR = ['processing', 'entregado', 'recibido', 'enviado', 'completed'];
 
-    public function importarHistorico(int $maxPaginas = 10): array {
+    public function importarHistorico(int $maxPaginas = 10, ?string $after = null): array {
         $r = ['importados' => 0, 'duplicados' => 0, 'errores' => 0, 'detalle' => [], 'statuses_vistos' => []];
 
         for ($pag = 1; $pag <= $maxPaginas; $pag++) {
-            $orders = $this->apiRequest('orders', 'GET', [
+            $params = [
                 'status'   => 'any',
                 'page'     => $pag,
                 'per_page' => 100,
                 'orderby'  => 'date',
                 'order'    => 'desc',
-            ]);
+            ];
+            if ($after) {
+                $params['after'] = $after;
+            }
+            $orders = $this->apiRequest('orders', 'GET', $params);
 
             if ($orders === null) {
                 $r['errores']++;

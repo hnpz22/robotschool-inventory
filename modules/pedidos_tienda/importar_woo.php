@@ -14,11 +14,22 @@ $woo    = new WooSync($db);
 $result = null;
 $error  = '';
 
+$desdeDefault = date('Y-m-d', strtotime('-1 year'));
+$desdeForm    = $desdeDefault;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && Auth::csrfVerify($_POST['csrf'] ?? '')) {
     if (!$woo->isConfigured()) {
         $error = 'WooCommerce no está configurado. Define las variables WOO_* en el archivo .env y reinicia el contenedor.';
     } else {
-        $result = $woo->importarHistorico(20);
+        $desdeInput = trim($_POST['desde'] ?? '');
+        $desdeForm  = $desdeInput ?: $desdeDefault;
+        $afterIso   = null;
+        if ($desdeForm && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desdeForm)) {
+            $afterIso = $desdeForm . 'T00:00:00';
+        }
+        set_time_limit(0);
+        ignore_user_abort(true);
+        $result = $woo->importarHistorico(20, $afterIso);
     }
 }
 
@@ -92,18 +103,28 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
   <div class="card-body">
     <p class="text-muted small mb-3">
       Trae pedidos en estado <strong>Procesando, Completado, Recibido, Entregado y Enviado</strong>
-      desde WooCommerce mediante la API REST. Se importan hasta
-      <strong>2 000 pedidos</strong> (20&nbsp;páginas &times;&nbsp;100).
+      desde WooCommerce mediante la API REST, filtrados <strong>desde la fecha indicada</strong>.
+      Tope máximo <strong>2 000 pedidos</strong> (20&nbsp;páginas &times;&nbsp;100).
       Los pedidos cuyo <code>woo_order_id</code> ya existe se omiten automáticamente.<br>
       <span class="text-muted">Mapeo: <code>processing</code> → Pendiente &bull;
       <code>completed / recibido / entregado</code> → Entregado &bull;
       <code>enviado</code> → Despachado</span>
     </p>
-    <form method="POST">
+    <form method="POST" class="row g-2 align-items-end">
       <input type="hidden" name="csrf" value="<?= Auth::csrfToken() ?>">
-      <button type="submit" class="btn btn-primary" <?= !$woo->isConfigured() ? 'disabled' : '' ?>>
-        <i class="bi bi-cloud-download me-1"></i>Importar pedidos históricos
-      </button>
+      <div class="col-auto">
+        <label for="desde" class="form-label small mb-1">Traer pedidos desde</label>
+        <input type="date" class="form-control form-control-sm" id="desde" name="desde"
+               value="<?= htmlspecialchars($desdeForm) ?>" max="<?= date('Y-m-d') ?>">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary btn-sm" <?= !$woo->isConfigured() ? 'disabled' : '' ?>>
+          <i class="bi bi-cloud-download me-1"></i>Importar pedidos históricos
+        </button>
+      </div>
+      <div class="col-auto">
+        <small class="text-muted">Default: hace 1 año. Ampliá el rango si faltan pedidos más antiguos.</small>
+      </div>
     </form>
   </div>
 </div>
