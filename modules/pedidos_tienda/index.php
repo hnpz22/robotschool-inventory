@@ -624,7 +624,7 @@ if ($totalGlobal == 0): ?>
                 fn($v) => $v !== ''
             );
           ?>
-          <a href="?<?= http_build_query($sortPrms) ?>" class="text-white text-decoration-none">
+          <a href="?<?= http_build_query($sortPrms) ?>" class="text-decoration-none" style="color:var(--rs-text-muted)">
             Fecha <?= $sortIcon ?>
           </a>
         </th>
