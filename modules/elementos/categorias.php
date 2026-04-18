@@ -39,6 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $db->prepare("INSERT INTO categorias (nombre,prefijo,descripcion,icono,color,activa) VALUES (?,?,?,?,?,?)")
                ->execute([$nombre, $prefijo, $descripcion, $icono, $color, $activa]);
+            $nuevaCatId = (int)$db->lastInsertId();
+            // Inicializa contador de códigos para que los elementos de esta categoría
+            // puedan generar su primer código (RS-PREFIJO-001).
+            $db->prepare("INSERT INTO codigos_secuencia (categoria_id, ultimo_numero) VALUES (?, 0) ON DUPLICATE KEY UPDATE categoria_id=categoria_id")
+               ->execute([$nuevaCatId]);
             $success = 'Categoría creada correctamente.';
         }
     } catch (Exception $e) {

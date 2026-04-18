@@ -6,6 +6,12 @@ function generarCodigo(int $categoriaId): string {
     $db = Database::get();
     $db->beginTransaction();
     try {
+        // Garantiza que existe fila de contador para la categoría.
+        // Categorías creadas desde la UI no insertaban en codigos_secuencia,
+        // provocando "Categoría no encontrada" al generar el primer código.
+        $db->prepare("INSERT INTO codigos_secuencia (categoria_id, ultimo_numero) VALUES (?, 0) ON DUPLICATE KEY UPDATE categoria_id=categoria_id")
+           ->execute([$categoriaId]);
+
         $st = $db->prepare("SELECT c.prefijo, cs.ultimo_numero FROM categorias c JOIN codigos_secuencia cs ON cs.categoria_id=c.id WHERE c.id=? FOR UPDATE");
         $st->execute([$categoriaId]);
         $row = $st->fetch();

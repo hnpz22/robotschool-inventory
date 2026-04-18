@@ -33,7 +33,7 @@ try {
     $db = Database::get();
 
     // Obtener prefijo de la categoría
-    $cat = $db->prepare("SELECT prefijo FROM categorias WHERE id=? AND activo=1");
+    $cat = $db->prepare("SELECT prefijo FROM categorias WHERE id=? AND activa=1");
     $cat->execute([$catId]);
     $catRow = $cat->fetch();
     if (!$catRow) { echo json_encode(['ok'=>false,'error'=>'Categoría inválida']); exit; }
@@ -43,8 +43,8 @@ try {
 
     $db->prepare("
         INSERT INTO elementos
-          (codigo, nombre, descripcion, categoria_id, unidad_medida,
-           costo_real_cop, precio_unit_usd, stock_actual, stock_minimo,
+          (codigo, nombre, descripcion, categoria_id, unidad,
+           costo_real_cop, precio_usd, stock_actual, stock_minimo,
            proveedor_id, ubicacion, activo, created_by)
         VALUES
           (?,?,?,?,?,?,?,?,5,?,?,1,?)
@@ -65,8 +65,8 @@ try {
     // Registrar movimiento inicial si hay stock
     if ($stockIni > 0) {
         $db->prepare("
-            INSERT INTO movimientos (elemento_id, tipo, cantidad, stock_resultante, notas, created_by)
-            VALUES (?, 'entrada', ?, ?, 'Stock inicial al crear desde pedido de importación', ?)
+            INSERT INTO movimientos (elemento_id, tipo, cantidad, stock_antes, stock_despues, motivo, usuario_id)
+            VALUES (?, 'entrada', ?, 0, ?, 'Stock inicial al crear desde pedido de importación', ?)
         ")->execute([$elemId, $stockIni, $stockIni, Auth::user()['id']]);
     }
 
